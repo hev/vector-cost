@@ -75,6 +75,7 @@ calculator.config.json  display order + default vendor (editorial, not vendor da
 src/calculator.html     the page, with @@RATES@@ placeholders
 bin/check               validate every card, show per-GB equivalents
 bin/build               inline the cards -> dist/index.html   (--check for CI)
+bin/test                drive the controls under a minimal DOM
 bin/sync                push dist/ into the sites that vendor it  (--check)
 dist/index.html         built output, committed so consumers can vendor it
 ```

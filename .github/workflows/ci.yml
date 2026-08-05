@@ -25,6 +25,12 @@ jobs:
       - name: dist/ matches rates/
         run: node bin/build --check
 
+      # Drives the page's real event handlers under a minimal DOM. Catches the
+      # class of bug that every numeric check misses, because none of them touch
+      # the UI — see the comment at the top of bin/test.
+      - name: Controls behave
+        run: node bin/test
+
       # The model is executed by a downstream verifier that gates a talk's slide
       # figures. If this block stops being extractable, that breaks silently
       # somewhere else, so assert the contract here.

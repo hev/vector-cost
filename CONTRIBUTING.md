@@ -53,8 +53,14 @@ The one thing that is out of scope by design is **query cost**. See the README.
 ```sh
 node bin/check          # validate the rate cards
 node bin/build          # rebuild dist/index.html
+node bin/test           # drive the controls under a minimal DOM
 open dist/index.html    # no server needed
 ```
+
+`bin/test` is worth knowing about: the numeric checks all run the model directly
+and never touch the UI, so they cannot see a broken control. It exists because
+one such bug shipped — the vendor objects lost `write.paths` to a spread, and the
+page threw on load while every number still checked out.
 
 Edit `src/calculator.html`, not `dist/index.html` — `dist` is generated and CI
 checks it matches. Plain node, no dependencies, no package.json; please keep it

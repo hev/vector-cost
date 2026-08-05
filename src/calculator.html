@@ -585,9 +585,19 @@ function pathCost(card, path, bytes, chunks) {
   return c;
 }
 
+// Spelled out rather than spread from the card, because `storage` and `write`
+// are declarative objects on the card and callables here — spreading would leave
+// the UI reading `.write.paths` off a function.
 const VENDORS = Object.fromEntries(RATES.map(card => [card.id, {
-  ...card,
+  id: card.id,
+  name: card.name,
+  note: card.note,
+  verified: card.verified,
+  sources: card.sources,
+  billingUnit: card.billingUnit,
   min: card.minimumMonthly,
+  paths: card.write.paths,
+  pathLabel: card.write.label,
   storage: b => (b / UNIT[card.billingUnit]) * card.storage.perUnitMonth,
   // An unknown path id falls back to the first one, which is also the default,
   // so switching vendors mid-session can never price against a path that the
@@ -1061,8 +1071,7 @@ function syncControlVisibility() {
   // The write-path selector only exists for vendors that sell more than one way
   // in. That was Pinecone alone when this was written, but it is a property of
   // the rate card now, not a name check.
-  const paths = VENDORS[S.vendor].write.paths;
-  show("fPath", paths.length > 1);
+  show("fPath", VENDORS[S.vendor].paths.length > 1);
   const rw = document.getElementById("rescoreWrap");
   rw.hidden = !(S.indexType !== "sparse" && S.quant !== "f32");
 }
@@ -1071,9 +1080,9 @@ function show(id, on) { const el = document.getElementById(id); if (el) el.hidde
 /** Rebuild the write-path buttons for the current vendor. */
 function renderPaths() {
   const card = VENDORS[S.vendor];
-  const paths = card.write.paths;
+  const paths = card.paths;
   if (!paths.some(p => p.id === S.path)) S.path = paths[0].id;
-  set("pathLabel", card.write.label || "Write path");
+  set("pathLabel", card.pathLabel || "Write path");
   document.getElementById("segPath").innerHTML = paths.map(p =>
     `<button data-v="${esc(p.id)}" aria-pressed="${p.id === S.path}">${esc(p.label || p.id)}</button>`
   ).join("");

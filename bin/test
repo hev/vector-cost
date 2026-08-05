@@ -1,0 +1,126 @@
+#!/usr/bin/env node
+// Drive the built page's real event handlers under a minimal DOM.
+//
+//   bin/test
+//
+// This exists because of a bug it caught. The vendor objects are built by
+// spreading the rate card and then overriding `storage` and `write` with
+// callables — which silently destroyed `write.paths`, so the control that reads
+// it threw on page load. Every numeric check still passed, because none of them
+// touch the UI. Anything that only runs the model cannot see that class of bug.
+//
+// The DOM here is the smallest thing the page will run against: ids return
+// stubs, innerHTML is a string, and querySelectorAll returns nothing (which
+// makes the chart's hover layer no-op). That is enough to exercise the control
+// wiring, which is the part with branching logic in it.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { ROOT } from "./lib.mjs";
+
+const html = readFileSync(join(ROOT, "dist", "index.html"), "utf8");
+const script = html.slice(html.indexOf("<script>\n") + 9, html.lastIndexOf("</script>"));
+
+const els = new Map();
+const el = (id) => {
+	if (!els.has(id)) {
+		els.set(id, {
+			id, innerHTML: "", textContent: "", hidden: false, value: "", checked: false,
+			listeners: {},
+			addEventListener(t, fn) { (this.listeners[t] ||= []).push(fn); },
+			setAttribute() {}, getAttribute: () => null,
+			querySelector: () => null, querySelectorAll: () => [],
+		});
+	}
+	return els.get(id);
+};
+el("size").value = "1";
+el("sizeUnit").value = "1000";
+
+globalThis.document = { getElementById: el, querySelector: () => null, querySelectorAll: () => [] };
+globalThis.window = { addEventListener() {} };
+
+// Loading the script at all is the first assertion: the page's top-level code
+// calls render(), which is where the write.paths bug surfaced.
+const { S, timeline, profile, GB, VENDORS } = new Function(
+	`${script}\nreturn { S, timeline, profile, GB, VENDORS };`,
+)();
+
+const fire = (id, type, evt) => {
+	for (const fn of el(id).listeners[type] || []) fn(evt);
+};
+const clickSeg = (id, v) =>
+	fire(id, "click", { target: { closest: () => ({ dataset: { v } }) }, currentTarget: { querySelectorAll: () => [] } });
+const setInput = (id, value) => { el(id).value = String(value); fire(id, "input", { target: { value: String(value) } }); };
+const setSelect = (id, value) => { el(id).value = String(value); fire(id, "change", { target: { value: String(value) } }); };
+const toggle = (id, on) => { el(id).checked = on; fire(id, "change", { target: { checked: on } }); };
+
+const total = () => timeline().at(-1).cum;
+const amp = () => profile(S.datasetGB * GB).bytes / (S.datasetGB * GB);
+const usd = (n) => `$${Math.round(n).toLocaleString("en-US")}`;
+
+let fails = 0;
+const ok = (cond, label, detail = "") => {
+	if (!cond) fails++;
+	console.log(`  ${cond ? "ok  " : "FAIL"}  ${label}${detail ? `  — ${detail}` : ""}`);
+};
+
+console.log("\ncontrols\n");
+setInput("size", 1);
+setSelect("sizeUnit", 1000);
+ok(S.datasetGB === 1000, "size + unit compose into a dataset size", `${S.datasetGB} GB`);
+
+const totals = {};
+for (const t of ["sparse", "dense", "multi"]) {
+	clickSeg("segIndex", t);
+	totals[t] = total();
+}
+ok(totals.sparse < totals.dense && totals.dense < totals.multi, "index type orders the bill", Object.entries(totals).map(([k, v]) => `${k} ${usd(v)}`).join(" < "));
+
+clickSeg("segIndex", "dense");
+const before = total();
+setInput("reindexes", 12);
+ok(S.reindexes === 12 && total() > before, "re-index cadence moves the total", `+${usd(total() - before)}`);
+setInput("reindexes", 10);
+
+clickSeg("segIndex", "multi");
+setSelect("quant", "f32");
+const f32 = amp();
+setSelect("quant", "binary");
+const bin = amp();
+toggle("rescore", true);
+const both = amp();
+ok(bin < f32, "binary quantization shrinks the index", `${f32.toFixed(0)}× → ${bin.toFixed(0)}×`);
+ok(both > f32, "binary + rescore copy exceeds plain f32", `${both.toFixed(0)}× vs ${f32.toFixed(0)}×`);
+toggle("rescore", false);
+setSelect("quant", "f32");
+
+console.log("\nvendors · every control below is generated from the rate cards\n");
+for (const id of Object.keys(VENDORS)) {
+	clickSeg("segVendor", id);
+	const card = VENDORS[id];
+	const buttons = [...el("segPath").innerHTML.matchAll(/data-v="([^"]+)"/g)].map((m) => m[1]);
+	ok(buttons.length === card.paths.length, `${card.name}: one button per write path`, `[${buttons.join(", ")}]`);
+	ok(!el("fPath").hidden === card.paths.length > 1, `${card.name}: path selector shown only when there is a choice`);
+	ok(buttons.includes(S.path), `${card.name}: the selected path is one this vendor offers`, S.path);
+	ok(el("vendorHint").textContent === `billed in ${card.billingUnit}`, `${card.name}: billing unit hint`, el("vendorHint").textContent);
+	ok(isFinite(total()) && total() > 0, `${card.name}: prices to a real number`, usd(total()));
+}
+
+// A vendor with several paths must reprice when the path changes, and a path id
+// must never survive a switch to a vendor that doesn't offer it.
+const multi = Object.values(VENDORS).find((v) => v.paths.length > 1);
+if (multi) {
+	clickSeg("segVendor", multi.id);
+	const first = total();
+	clickSeg("segPath", multi.paths[1].id);
+	ok(total() !== first, `${multi.name}: switching write path reprices`, `${usd(first)} → ${usd(total())}`);
+
+	const single = Object.values(VENDORS).find((v) => v.paths.length === 1);
+	if (single) {
+		clickSeg("segVendor", single.id);
+		ok(S.path === single.paths[0].id, "a stale path resets on a vendor that lacks it", `S.path=${S.path}`);
+	}
+}
+
+console.log(fails ? `\n  ${fails} check(s) FAILED\n` : "\n  all checks pass\n");
+process.exit(fails ? 1 : 0);
