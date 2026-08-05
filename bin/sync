@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+// Push dist/index.html into the repos that vendor a copy of it.
+//
+//   bin/sync            # copy into every consumer that exists locally
+//   bin/sync --check    # report drift, change nothing, exit non-zero if stale
+//
+// Consumers commit their own copy rather than reaching across repos, so each one
+// stays self-contained and buildable alone. The cost of that choice is drift,
+// which is what --check is for: run it before shipping either site.
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { createHash } from "node:crypto";
+import { ROOT } from "./lib.mjs";
+
+const WORKSPACE = join(ROOT, "..");
+const CONSUMERS = [
+	{
+		repo: "workshops",
+		path: join(WORKSPACE, "workshops", "decks", "choosing-a-vector-database", "assets", "calculator.html"),
+		why: "deck asset — bin/verify gates the slide figures against this file",
+	},
+	{
+		repo: "mind",
+		path: join(WORKSPACE, "mind", "site", "public", "research", "vector-cost", "index.html"),
+		why: "hevmind.com/research/vector-cost",
+	},
+];
+
+const check = process.argv.includes("--check");
+const SRC = join(ROOT, "dist", "index.html");
+if (!existsSync(SRC)) {
+	console.error("\n  ✗ dist/index.html does not exist — run bin/build first\n");
+	process.exit(1);
+}
+const src = readFileSync(SRC, "utf8");
+const srcHash = short(src);
+
+console.log(`\n  dist/index.html · ${srcHash}\n`);
+
+let stale = 0;
+let wrote = 0;
+let missing = 0;
+
+for (const c of CONSUMERS) {
+	if (!existsSync(dirname(c.path))) {
+		// A consumer repo that isn't checked out locally is not an error — this
+		// tool is a convenience, not a dependency.
+		if (!existsSync(join(WORKSPACE, c.repo))) {
+			console.log(`  ·  ${c.repo.padEnd(10)} not checked out — skipped`);
+			missing++;
+			continue;
+		}
+	}
+	const prev = existsSync(c.path) ? readFileSync(c.path, "utf8") : null;
+	const rel = c.path.replace(`${WORKSPACE}/`, "");
+
+	if (prev === src) {
+		console.log(`  =  ${c.repo.padEnd(10)} current    ${rel}`);
+		continue;
+	}
+	stale++;
+	const state = prev === null ? "absent" : `stale ${short(prev)}`;
+	if (check) {
+		console.log(`  !  ${c.repo.padEnd(10)} ${state.padEnd(20)} ${rel}`);
+		console.log(`     ${c.why}`);
+		continue;
+	}
+	mkdirSync(dirname(c.path), { recursive: true });
+	writeFileSync(c.path, src);
+	wrote++;
+	console.log(`  ${prev === null ? "+" : "~"}  ${c.repo.padEnd(10)} ${prev === null ? "written" : "updated"}    ${rel}`);
+}
+
+if (check) {
+	console.log(
+		stale
+			? `\n  ${stale} consumer(s) out of date. Run bin/sync, then commit in each repo.\n`
+			: `\n  every consumer matches dist/\n`,
+	);
+	process.exit(stale ? 1 : 0);
+}
+
+if (wrote) {
+	console.log(`\n  ${wrote} file(s) written. Commit them in their own repos:`);
+	for (const c of CONSUMERS) console.log(`    cd ../${c.repo} && git add -A && git commit`);
+	console.log("");
+	if (existsSync(join(WORKSPACE, "workshops", "bin", "verify"))) {
+		console.log("  The deck's figures are gated on this file — re-run its check:");
+		console.log("    cd ../workshops && node bin/verify choosing-a-vector-database\n");
+	}
+} else if (!missing) {
+	console.log("\n  nothing to do — every consumer already matches.\n");
+}
+
+function short(s) {
+	return createHash("sha256").update(s).digest("hex").slice(0, 12);
+}

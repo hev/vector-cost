@@ -1,0 +1,68 @@
+name: Pricing correction
+description: A rate in this calculator is wrong. (A PR against rates/<vendor>.json is even better — but this is fine.)
+title: "rates: <vendor> — "
+labels: ["pricing"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks — a wrong rate makes the whole page wrong, so this is a real bug.
+
+        If you'd rather just fix it, every rate lives in one file under
+        [`rates/`](https://github.com/hev/vector-cost/tree/main/rates) and a PR
+        is very welcome. Otherwise, fill this in and it'll get done.
+
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor
+      placeholder: turbopuffer / topk / Pinecone / …
+    validations:
+      required: true
+
+  - type: dropdown
+    id: field
+    attributes:
+      label: Which number
+      options:
+        - Storage rate
+        - Write rate
+        - Billing unit (GB vs GiB)
+        - Monthly minimum
+        - The explanatory note
+        - Something else / more than one
+    validations:
+      required: true
+
+  - type: textarea
+    id: correction
+    attributes:
+      label: What it should be
+      description: The correct figure, and its unit.
+      placeholder: |
+        Storage is $0.28/GB-month, not $0.33. The $0.33 was the old Standard rate.
+    validations:
+      required: true
+
+  - type: input
+    id: source
+    attributes:
+      label: Where can a reader check it?
+      description: A public URL. If the rate only appears inside a calculator widget rather than as page text, say so — that's worth noting on the card.
+      placeholder: https://…/pricing
+    validations:
+      required: true
+
+  - type: input
+    id: effective
+    attributes:
+      label: Effective date, if you know it
+      placeholder: 2026-07-01
+
+  - type: checkboxes
+    id: affiliation
+    attributes:
+      label: Affiliation
+      options:
+        - label: I work for this vendor
+          required: false

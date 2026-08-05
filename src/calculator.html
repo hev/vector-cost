@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vector index cost calculator — 36 months</title>
+<style>
+  :root {
+    color-scheme: light;
+    --paper: #fafaf5;
+    --surface: #ffffff;
+    --paper-warm: #f4f0e6;
+    --ink: #111111;
+    --ink-soft: #2a2a28;
+    --muted: #6b6b66;
+    --signal: #e25822;
+    --hairline: #e1ded4;
+    --grid: #e6e3da;
+    --axis: #c9c5b8;
+    --deemph: #b3ac9c;
+
+    --s-store: #2a78d6;
+    --s-write: #e25822;
+    --s-embed: #1baf7a;
+
+    --body: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --paper: #0f0f0e;
+      --surface: #141413;
+      --paper-warm: #1c1c1a;
+      --ink: #ffffff;
+      --ink-soft: #e6e4dc;
+      --muted: #9b978c;
+      --signal: #e25822;
+      --hairline: #2c2c29;
+      --grid: #232320;
+      --axis: #383834;
+      --deemph: #56564f;
+      --s-store: #3987e5;
+      --s-write: #e25822;
+      --s-embed: #199e70;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0f0f0e;
+    --surface: #141413;
+    --paper-warm: #1c1c1a;
+    --ink: #ffffff;
+    --ink-soft: #e6e4dc;
+    --muted: #9b978c;
+    --signal: #e25822;
+    --hairline: #2c2c29;
+    --grid: #232320;
+    --axis: #383834;
+    --deemph: #56564f;
+    --s-store: #3987e5;
+    --s-write: #e25822;
+    --s-embed: #199e70;
+  }
+
+  * { box-sizing: border-box; }
+  /* .field/.inline set display, which would otherwise beat the UA [hidden] rule */
+  [hidden] { display: none !important; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink-soft);
+    font-family: var(--body);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 72px; }
+
+  .kicker {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--signal);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(1.6rem, 3.6vw, 2.4rem);
+    line-height: 1.15;
+    color: var(--ink);
+    margin: 0 0 12px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0 0 28px; }
+  h2 {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px;
+    font-weight: 600;
+  }
+
+  /* ---------- controls ---------- */
+  .controls {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 20px 22px 22px;
+    margin-bottom: 26px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 22px 30px; align-items: flex-start; }
+  .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .field > label, .field > .lbl {
+    font-size: 0.76rem;
+    font-weight: 600;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+  }
+  input[type="number"], select {
+    font-family: var(--body);
+    font-size: 0.92rem;
+    color: var(--ink);
+    background: var(--paper);
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    padding: 7px 9px;
+    min-width: 92px;
+  }
+  input[type="number"]:focus-visible, select:focus-visible, .seg button:focus-visible, .btn:focus-visible {
+    outline: 2px solid var(--signal);
+    outline-offset: 2px;
+  }
+  .seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: 6px; overflow: hidden; }
+  .seg button {
+    font-family: var(--body);
+    font-size: 0.86rem;
+    padding: 7px 13px;
+    border: 0;
+    border-right: 1px solid var(--hairline);
+    background: var(--paper);
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button[aria-pressed="true"] { background: var(--signal); color: #fff; font-weight: 600; }
+  .inline { display: flex; align-items: center; gap: 8px; }
+  .chk { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--ink-soft); cursor: pointer; }
+  .hint { font-size: 0.76rem; color: var(--muted); }
+  .sep { height: 1px; background: var(--hairline); margin: 20px 0; border: 0; }
+
+  details.adv summary {
+    cursor: pointer;
+    font-size: 0.78rem;
+    font-family: var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    list-style: none;
+  }
+  details.adv summary::-webkit-details-marker { display: none; }
+  details.adv summary::before { content: "▸ "; color: var(--signal); }
+  details.adv[open] summary::before { content: "▾ "; }
+  details.adv > .row { margin-top: 18px; }
+
+  /* ---------- stat tiles ---------- */
+  .hero {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-top: 3px solid var(--signal);
+    border-radius: 10px;
+    padding: 22px 24px;
+    margin-bottom: 18px;
+  }
+  .hero-label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+  .hero-num {
+    font-family: var(--body);
+    font-size: clamp(2.6rem, 7vw, 4rem);
+    font-weight: 700;
+    color: var(--ink);
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    margin: 4px 0 2px;
+  }
+  .hero-sub { font-size: 0.84rem; color: var(--muted); }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 30px; }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .kpi .k-top { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+  .swatch { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+  .kpi .k-label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+  .kpi .k-val { font-size: 1.85rem; font-weight: 700; color: var(--ink); line-height: 1.1; letter-spacing: -0.01em; }
+  .kpi .k-sub { font-size: 0.78rem; color: var(--muted); margin-top: 5px; }
+
+  /* ---------- chart ---------- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 20px 22px 22px;
+    margin-bottom: 26px;
+  }
+  .card-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
+  .card-title { font-family: var(--mono); font-size: 0.95rem; font-weight: 700; color: var(--ink); }
+  .card-sub { font-size: 0.82rem; color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+  .btn {
+    font-family: var(--body); font-size: 0.8rem;
+    background: var(--paper); color: var(--muted);
+    border: 1px solid var(--hairline); border-radius: 6px;
+    padding: 6px 11px; cursor: pointer;
+  }
+  .btn[aria-pressed="true"] { color: var(--ink); border-color: var(--axis); font-weight: 600; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 18px; margin-bottom: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--ink-soft); }
+  .legend-item .swatch { width: 13px; height: 13px; }
+
+  .plot-wrap { position: relative; }
+  svg.chart { display: block; width: 100%; height: auto; overflow: visible; }
+  .tick { font-size: 11px; fill: var(--muted); font-family: var(--body); font-variant-numeric: tabular-nums; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-line { stroke: var(--axis); stroke-width: 1; }
+  .rx-line { stroke: var(--axis); stroke-width: 1; stroke-opacity: 0.85; }
+  .end-label { font-size: 12px; font-weight: 700; fill: var(--ink); font-family: var(--body); }
+
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0;
+    background: var(--surface); border: 1px solid var(--hairline);
+    border-radius: 8px; padding: 10px 12px; min-width: 178px;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.13);
+    font-size: 0.8rem; transition: opacity .1s; z-index: 5;
+  }
+  .tip .t-month { font-weight: 700; color: var(--ink); margin-bottom: 7px; font-size: 0.82rem; }
+  .tip .t-row { display: flex; align-items: center; gap: 8px; margin: 3px 0; }
+  .tip .t-key { width: 13px; height: 2.5px; border-radius: 2px; flex: none; }
+  .tip .t-val { font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; margin-left: auto; }
+  .tip .t-name { color: var(--muted); }
+  .tip .t-tot { border-top: 1px solid var(--hairline); margin-top: 7px; padding-top: 6px; }
+  .tip .t-rx { color: var(--signal); font-weight: 600; font-size: 0.75rem; margin-top: 6px; }
+
+  /* ---------- ladder ---------- */
+  .ladder { display: flex; flex-direction: column; gap: 11px; }
+  .lrow { display: grid; grid-template-columns: 12.5em 1fr 6.2em; gap: 12px; align-items: center; }
+  .lrow .l-name { font-size: 0.84rem; color: var(--ink-soft); }
+  .lrow .l-name b { display: block; color: var(--ink); font-weight: 600; }
+  .lrow .l-name span { font-size: 0.76rem; color: var(--muted); }
+  .l-track { display: block; background: var(--paper-warm); border-radius: 4px; height: 22px; position: relative; overflow: hidden; }
+  .l-fill { display: block; height: 100%; min-width: 3px; border-radius: 0 4px 4px 0; background: var(--deemph); }
+  .lrow.on .l-fill { background: var(--signal); }
+  .lrow.on .l-name b { color: var(--signal); }
+  .l-val { text-align: right; font-size: 0.84rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+  /* ---------- table ---------- */
+  .tablewrap { overflow-x: auto; max-height: 420px; overflow-y: auto; border: 1px solid var(--hairline); border-radius: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+  th, td { padding: 7px 12px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    position: sticky; top: 0; background: var(--paper-warm); color: var(--muted);
+    font-weight: 600; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--hairline);
+  }
+  tbody tr:nth-child(even) { background: color-mix(in srgb, var(--paper-warm) 45%, transparent); }
+  tbody td { color: var(--ink-soft); }
+  tr.is-rx td:first-child { color: var(--signal); font-weight: 700; }
+
+  /* ---------- assumptions ---------- */
+  .assume { font-size: 0.84rem; color: var(--muted); }
+  .assume ul { margin: 0 0 14px; padding-left: 20px; }
+  .assume li { margin-bottom: 6px; }
+  .assume b, .assume strong { color: var(--ink-soft); }
+  .assume code { font-family: var(--mono); font-size: 0.86em; background: var(--paper-warm); padding: 1px 5px; border-radius: 3px; color: var(--ink-soft); }
+  .assume h3 { font-family: var(--mono); font-size: 0.8rem; color: var(--ink); margin: 18px 0 8px; letter-spacing: 0.02em; }
+  footer { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--hairline); font-size: 0.8rem; color: var(--muted); }
+  footer a { color: var(--signal); }
+  .foot-line { margin: 0 0 8px; max-width: 78ch; }
+  .foot-line b { color: var(--ink-soft); }
+  .foot-links { display: flex; align-items: center; gap: 9px; margin: 14px 0 0; flex-wrap: wrap; }
+  .foot-links .dot { color: var(--axis); }
+  a.gh {
+    display: inline-flex; align-items: center; gap: 7px;
+    font-family: var(--mono); font-size: 0.78rem;
+    color: var(--ink-soft); text-decoration: none;
+    border: 1px solid var(--hairline); border-radius: 6px;
+    padding: 5px 10px; background: var(--surface);
+  }
+  a.gh:hover { border-color: var(--axis); color: var(--ink); }
+  a.gh svg { flex: none; }
+  @media (max-width: 640px) {
+    .lrow { grid-template-columns: 1fr; gap: 4px; }
+    .lrow .l-val { text-align: left; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">hev mind · vector index cost</p>
+  <h1>What your index actually costs, month 1 to month 36</h1>
+  <p class="lede">
+    Vendor calculators quote you a month you will never have. Start from the one number you
+    walked in with — how much data you actually have — and let write amplification do the rest.
+  </p>
+
+  <!-- =============== CONTROLS =============== -->
+  <div class="controls">
+    <div class="row">
+      <div class="field">
+        <label for="size">Dataset size on disk</label>
+        <div class="inline">
+          <input type="number" id="size" value="1" min="0.001" step="any" style="width:110px">
+          <select id="sizeUnit" aria-label="Size unit">
+            <option value="1000" selected>TB</option>
+            <option value="1">GB</option>
+            <option value="1000000">PB</option>
+          </select>
+        </div>
+        <span class="hint" id="chunkHint"></span>
+      </div>
+
+      <div class="field">
+        <span class="lbl">Index type</span>
+        <div class="seg" id="segIndex" role="group" aria-label="Index type">
+          <button data-v="sparse" aria-pressed="false">sparse / BM25</button>
+          <button data-v="dense" aria-pressed="true">dense</button>
+          <button data-v="multi" aria-pressed="false">multi-vector</button>
+        </div>
+      </div>
+
+      <div class="field" id="fDims">
+        <label for="dims">Dimensions</label>
+        <select id="dims">
+          <option value="384">384</option>
+          <option value="768">768</option>
+          <option value="1024">1024</option>
+          <option value="1536" selected>1536 · 3-small</option>
+          <option value="3072">3072 · 3-large</option>
+        </select>
+      </div>
+
+      <div class="field" id="fMvDims">
+        <label for="mvDims">Dims per token</label>
+        <select id="mvDims">
+          <option value="96">96</option>
+          <option value="128" selected>128 · ColBERT/ColPali</option>
+          <option value="256">256</option>
+        </select>
+      </div>
+
+      <div class="field" id="fQuant">
+        <label for="quant">Quantization</label>
+        <select id="quant">
+          <option value="f32" selected>none — float32</option>
+          <option value="int8">int8 — 4× cut</option>
+          <option value="binary">binary — 32× cut</option>
+        </select>
+        <label class="chk" id="rescoreWrap" hidden>
+          <input type="checkbox" id="rescore"> keep full-precision copy for rescoring
+        </label>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="row">
+      <div class="field">
+        <span class="lbl">Vendor</span>
+        <div class="seg" id="segVendor" role="group" aria-label="Vendor">
+          <!-- @@VENDOR_BUTTONS@@ -->
+        </div>
+        <span class="hint" id="vendorHint"></span>
+      </div>
+
+      <div class="field" id="fPath">
+        <span class="lbl" id="pathLabel">Write path</span>
+        <div class="seg" id="segPath" role="group" aria-label="Write path"></div>
+      </div>
+
+      <div class="field">
+        <label for="reindexes">Re-indexes in 36 months</label>
+        <input type="number" id="reindexes" value="10" min="0" max="35" step="1" style="width:100px">
+        <span class="hint" id="rxHint"></span>
+      </div>
+
+      <div class="field">
+        <label for="embed">Embedding model</label>
+        <select id="embed">
+          <option value="0.02" selected>text-embedding-3-small · $0.02/M</option>
+          <option value="0.13">text-embedding-3-large · $0.13/M</option>
+          <option value="custom">custom rate…</option>
+        </select>
+        <div class="inline" id="fCustomRate" hidden>
+          <input type="number" id="customRate" value="0.02" min="0" step="0.001" style="width:96px">
+          <span class="hint">$ per M tokens</span>
+        </div>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <details class="adv">
+      <summary>Advanced assumptions</summary>
+      <div class="row">
+        <div class="field">
+          <label for="chunk">Chunk size (KB)</label>
+          <input type="number" id="chunk" value="1" min="0.05" step="any" style="width:100px">
+        </div>
+        <div class="field">
+          <label for="hnsw">HNSW M (graph degree)</label>
+          <input type="number" id="hnsw" value="16" min="0" step="1" style="width:100px">
+        </div>
+        <div class="field">
+          <label for="sparseRatio">Sparse postings ratio (×)</label>
+          <input type="number" id="sparseRatio" value="0.3" min="0.01" step="0.05" style="width:100px">
+        </div>
+        <div class="field">
+          <label for="growth">Corpus growth (%/month)</label>
+          <input type="number" id="growth" value="0" min="0" max="50" step="0.5" style="width:100px">
+        </div>
+        <div class="field">
+          <span class="lbl">Source text</span>
+          <label class="chk">
+            <input type="checkbox" id="keepPayload"> also store it in the index
+          </label>
+          <span class="hint">Off = index structures only, so the types stay comparable. On adds 1× to every one.</span>
+        </div>
+      </div>
+    </details>
+  </div>
+
+  <!-- =============== OUTPUTS =============== -->
+  <div class="hero">
+    <div class="hero-label">36-month total — <span id="heroConfig"></span></div>
+    <div class="hero-num" id="heroTotal">—</div>
+    <div class="hero-sub" id="heroSub"></div>
+  </div>
+
+  <div class="kpis">
+    <div class="kpi">
+      <div class="k-top"><span class="swatch" style="background:var(--s-embed)"></span><span class="k-label">Embedding cost</span></div>
+      <div class="k-val" id="kEmbed">—</div>
+      <div class="k-sub" id="kEmbedSub"></div>
+    </div>
+    <div class="kpi">
+      <div class="k-top"><span class="swatch" style="background:var(--s-write)"></span><span class="k-label">Write cost</span></div>
+      <div class="k-val" id="kWrite">—</div>
+      <div class="k-sub" id="kWriteSub"></div>
+    </div>
+    <div class="kpi">
+      <div class="k-top"><span class="swatch" style="background:var(--s-store)"></span><span class="k-label">Storage cost per month</span></div>
+      <div class="k-val" id="kStore">—</div>
+      <div class="k-sub" id="kStoreSub"></div>
+    </div>
+    <div class="kpi">
+      <div class="k-top"><span class="swatch" style="background:var(--deemph)"></span><span class="k-label">Index on disk</span></div>
+      <div class="k-val" id="kIndex">—</div>
+      <div class="k-sub" id="kIndexSub"></div>
+    </div>
+  </div>
+
+  <!-- =============== CHART =============== -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title">Cumulative spend, months 1–36</span>
+      <button class="btn" id="tblBtn" aria-pressed="false">Table view</button>
+    </div>
+    <p class="card-sub" id="chartSub"></p>
+
+    <div class="legend" id="legend">
+      <span class="legend-item"><span class="swatch" style="background:var(--s-store)"></span>Storage</span>
+      <span class="legend-item"><span class="swatch" style="background:var(--s-write)"></span>Writes</span>
+      <span class="legend-item"><span class="swatch" style="background:var(--s-embed)"></span>Embedding</span>
+      <span class="legend-item"><span style="display:inline-block;width:1px;height:13px;background:var(--axis)"></span>Re-index</span>
+    </div>
+
+    <div class="plot-wrap" id="plotWrap">
+      <svg class="chart" id="chart" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet" role="img"
+           aria-label="Stacked area chart of cumulative storage, write and embedding cost over 36 months"></svg>
+      <div class="tip" id="tip" role="status" aria-live="polite"></div>
+    </div>
+
+    <div id="tableView" hidden style="margin-top:16px">
+      <div class="tablewrap">
+        <table id="tbl">
+          <thead>
+            <tr>
+              <th scope="col">Month</th>
+              <th scope="col">Storage</th>
+              <th scope="col">Writes</th>
+              <th scope="col">Embedding</th>
+              <th scope="col">Month total</th>
+              <th scope="col">Cumulative</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- =============== LADDER =============== -->
+  <div class="card">
+    <div class="card-head"><span class="card-title">Same corpus, four index shapes</span></div>
+    <p class="card-sub">36-month total at the current vendor, re-index cadence, quantization and embedding model.
+      The only thing that changes between rows is the index shape — which is the whole point.</p>
+    <div class="ladder" id="ladder"></div>
+  </div>
+
+  <!-- =============== ASSUMPTIONS =============== -->
+  <div class="card assume">
+    <div class="card-head"><span class="card-title">Every number this uses</span></div>
+    <p class="card-sub">No hidden constants. If you disagree with one, change it above or adjust for it — the ratios move together.</p>
+    <div id="assumeBody"></div>
+  </div>
+
+  <footer>
+    <p class="foot-line">
+      An estimate, like every vendor calculator — including the ones this argues with. The honest
+      version is to sample 20–100&nbsp;GB of your own corpus and measure it.
+    </p>
+    <p class="foot-line">
+      Every rate on this page is a JSON file you can correct.
+      <b>If we've got your pricing wrong, open a pull request</b> — that is what the repo is for.
+    </p>
+    <p class="foot-links">
+      <a class="gh" href="https://github.com/hev/vector-cost" rel="noopener">
+        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+        <span>hev/vector-cost</span>
+      </a>
+      <span class="dot" aria-hidden="true">·</span>
+      <a href="https://hevmind.com">hevmind.com</a>
+    </p>
+  </footer>
+</div>
+
+<script>
+"use strict";
+
+const REPO_URL = "https://github.com/hev/vector-cost";
+
+/* ============================================================
+   MODEL
+   Units are decimal throughout (1 GB = 1e9 B) because that is
+   how storage is billed. The one internal constant is
+   BYTES_PER_TOKEN = 4, which makes a 1 KB chunk 250 tokens and
+   1 GB of text 250M tokens — the figure the embedding math uses.
+   ============================================================ */
+const MONTHS = 36;
+const GB  = 1e9;
+const GiB = 1024 ** 3;
+const KB  = 1000;
+const BYTES_PER_TOKEN = 4;
+
+const QUANT = { f32: 4, int8: 1, binary: 0.125 };
+const UNIT = { GB, GiB };
+
+/* --- vendor rate cards --------------------------------------------------
+   GENERATED — do not edit below. The source of truth is rates/<id>.json in
+   github.com/hev/vector-cost, inlined here by bin/build. Correcting a price
+   is a pull request against one JSON file; you never have to read this page.
+   @@PROVENANCE@@
+   ------------------------------------------------------------------------ */
+const RATES = @@RATES@@;
+const DEFAULT_VENDOR = @@DEFAULT_VENDOR@@;
+
+// Rate cards are data, so every pricing shape has to be declarative: a flat
+// per-unit rate, a write-unit rate (Pinecone meters upserts at 1 WU per KB),
+// and a per-request rate (topk). They sum, so one path can carry several. A
+// vendor whose bill needs custom code here is a schema bug, not a special case.
+function pathCost(card, path, bytes, chunks) {
+  let c = 0;
+  if (path.perUnit) c += (bytes / UNIT[card.billingUnit]) * path.perUnit;
+  if (path.perMillionWriteUnits) c += (bytes / path.writeUnitBytes / 1e6) * path.perMillionWriteUnits;
+  if (path.perThousandRequests) c += (chunks / 1000) * path.perThousandRequests;
+  return c;
+}
+
+const VENDORS = Object.fromEntries(RATES.map(card => [card.id, {
+  ...card,
+  min: card.minimumMonthly,
+  storage: b => (b / UNIT[card.billingUnit]) * card.storage.perUnitMonth,
+  // An unknown path id falls back to the first one, which is also the default,
+  // so switching vendors mid-session can never price against a path that the
+  // new vendor doesn't offer.
+  write: (b, chunks, pathId) =>
+    pathCost(card, card.write.paths.find(p => p.id === pathId) || card.write.paths[0], b, chunks)
+}]));
+
+const S = {
+  datasetGB: 1000,
+  indexType: "dense",
+  dims: 1536,
+  mvDims: 128,
+  quant: "f32",
+  rescore: false,
+  vendor: DEFAULT_VENDOR,
+  path: null,
+  reindexes: 10,
+  embedRate: 0.02,
+  chunkKB: 1,
+  hnswM: 16,
+  sparseRatio: 0.3,
+  growth: 0,
+  keepPayload: false
+};
+
+/* --- index size --------------------------------------------------------- */
+function profile(sourceBytes, typeOverride) {
+  const type = typeOverride || S.indexType;
+  const chunkB = S.chunkKB * KB;
+  const chunks = sourceBytes / chunkB;
+  const q = QUANT[S.quant];
+  // Index structures only by default. You keep the source text whichever index
+  // you pick, so counting it would add exactly 1x to every type — it shrinks the
+  // spread, changes no decision, and makes sparse read 1.3x when the postings
+  // list genuinely is 0.3x. Toggle it on for an all-in storage figure.
+  const payload = S.keepPayload ? chunkB : 0;
+
+  if (type === "sparse") {
+    const per = S.sparseRatio * chunkB + payload;
+    return { bytes: chunks * per, chunks, per };
+  }
+  if (type === "multi") {
+    const tokensPerChunk = chunkB / BYTES_PER_TOKEN;
+    let vec = tokensPerChunk * S.mvDims * q;
+    if (S.quant !== "f32" && S.rescore) vec += tokensPerChunk * S.mvDims * 4;
+    return { bytes: chunks * (vec + payload), chunks, per: vec + payload };
+  }
+  // dense — vector + HNSW edges
+  const dims = typeOverride === "dense3072" ? 3072 : (typeOverride === "dense1536" ? 1536 : S.dims);
+  let vec = dims * q;
+  if (S.quant !== "f32" && S.rescore) vec += dims * 4;
+  const graph = S.hnswM * 2 * 4;
+  const per = vec + graph + payload;
+  return { bytes: chunks * per, chunks, per };
+}
+
+/* --- per-pass costs ----------------------------------------------------- */
+function embedCost(sourceBytes, type) {
+  const t = type || S.indexType;
+  if (t === "sparse") return 0;              // BM25 needs no model
+  return (sourceBytes / BYTES_PER_TOKEN / 1e6) * S.embedRate;
+}
+function writeCost(bytes, chunks) {
+  return VENDORS[S.vendor].write(bytes, chunks, S.path);
+}
+function storeCost(bytes) {
+  return VENDORS[S.vendor].storage(bytes);
+}
+
+/* --- re-index schedule -------------------------------------------------- */
+function schedule() {
+  const n = Math.max(0, Math.min(35, Math.round(S.reindexes)));
+  const set = new Set();
+  if (n > 0) {
+    const spacing = MONTHS / n;
+    for (let j = 1; j <= n; j++) {
+      const m = Math.round(j * spacing);
+      if (m > 1 && m <= MONTHS) set.add(m);
+    }
+  }
+  return set;
+}
+
+/* --- 36-month timeline -------------------------------------------------- */
+function timeline(typeOverride) {
+  const rx = schedule();
+  const g = S.growth / 100;
+  const rows = [];
+  let cStore = 0, cWrite = 0, cEmbed = 0, prevSource = 0;
+
+  for (let m = 1; m <= MONTHS; m++) {
+    const source = S.datasetGB * GB * Math.pow(1 + g, m - 1);
+    const p = profile(source, typeOverride);
+    let write = 0, embed = 0;
+
+    if (m === 1) {
+      write = writeCost(p.bytes, p.chunks);
+      embed = embedCost(source, typeOverride);
+    } else if (source > prevSource) {
+      const d = profile(source - prevSource, typeOverride);
+      write += writeCost(d.bytes, d.chunks);
+      embed += embedCost(source - prevSource, typeOverride);
+    }
+    if (rx.has(m)) {
+      write += writeCost(p.bytes, p.chunks);
+      embed += embedCost(source, typeOverride);
+    }
+
+    let store = storeCost(p.bytes);
+    const min = VENDORS[S.vendor].min;
+    if (store + write < min) store = min - write;   // monthly platform minimum
+
+    cStore += store; cWrite += write; cEmbed += embed;
+    rows.push({
+      m, store, write, embed,
+      total: store + write + embed,
+      cStore, cWrite, cEmbed,
+      cum: cStore + cWrite + cEmbed,
+      isRx: rx.has(m) || m === 1,
+      indexBytes: p.bytes
+    });
+    prevSource = source;
+  }
+  return rows;
+}
+
+/* ============================================================
+   FORMATTING
+   ============================================================ */
+function money(n) {
+  if (!isFinite(n)) return "—";
+  if (n === 0) return "$0";
+  const a = Math.abs(n);
+  if (a >= 1e9) return "$" + (n / 1e9).toFixed(a >= 1e10 ? 0 : 1) + "B";
+  if (a >= 1e6) return "$" + (n / 1e6).toFixed(a >= 1e7 ? 0 : 1) + "M";
+  if (a >= 1e4) return "$" + Math.round(n / 1e3) + "K";
+  if (a >= 1e3) return "$" + (n / 1e3).toFixed(1) + "K";
+  if (a >= 1)   return "$" + n.toFixed(0);
+  return "$" + n.toFixed(2);
+}
+function moneyFull(n) {
+  return "$" + Math.round(n).toLocaleString("en-US");
+}
+function bytes(b) {
+  if (b >= 1e12) return (b / 1e12).toFixed(b >= 1e13 ? 0 : 1) + " TB";
+  if (b >= 1e9)  return (b / 1e9).toFixed(b >= 1e10 ? 0 : 1) + " GB";
+  if (b >= 1e6)  return (b / 1e6).toFixed(0) + " MB";
+  if (b >= 1e3)  return (b / 1e3).toFixed(0) + " KB";
+  return Math.round(b) + " B";
+}
+function count(n) {
+  if (n >= 1e12) return (n / 1e12).toFixed(1) + "T";
+  if (n >= 1e9)  return (n / 1e9).toFixed(n >= 1e10 ? 0 : 1) + "B";
+  if (n >= 1e6)  return (n / 1e6).toFixed(n >= 1e7 ? 0 : 1) + "M";
+  if (n >= 1e3)  return (n / 1e3).toFixed(0) + "K";
+  return Math.round(n).toLocaleString("en-US");
+}
+const TYPE_LABEL = { sparse: "sparse / BM25", dense: "dense", multi: "multi-vector" };
+
+/* ============================================================
+   CHART — stacked cumulative area
+   ============================================================ */
+const W = 900, H = 380, M = { t: 14, r: 108, b: 38, l: 74 };
+const PW = W - M.l - M.r, PH = H - M.t - M.b;
+
+function niceMax(v) {
+  if (v <= 0) return 1;
+  const exp = Math.floor(Math.log10(v));
+  const base = Math.pow(10, exp);
+  const steps = [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10];
+  for (const s of steps) if (v <= s * base * 1.0001) return s * base;
+  return 10 * base;
+}
+function esc(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+let CHART_ROWS = [], CHART_X = null, CHART_MAX = 1;
+
+function drawChart(rows) {
+  const svg = document.getElementById("chart");
+  const max = niceMax(rows[rows.length - 1].cum);
+  CHART_ROWS = rows; CHART_MAX = max;
+
+  const x = m => M.l + ((m - 1) / (MONTHS - 1)) * PW;
+  const y = v => M.t + PH - (v / max) * PH;
+  CHART_X = x;
+
+  const parts = [];
+
+  // gridlines + y ticks
+  const TICKS = 5;
+  for (let i = 0; i <= TICKS; i++) {
+    const v = (max / TICKS) * i, yy = y(v);
+    parts.push(`<line class="grid-line" x1="${M.l}" y1="${yy.toFixed(1)}" x2="${M.l + PW}" y2="${yy.toFixed(1)}"/>`);
+    parts.push(`<text class="tick" x="${M.l - 10}" y="${(yy + 4).toFixed(1)}" text-anchor="end">${esc(money(v))}</text>`);
+  }
+
+  // re-index markers
+  rows.filter(r => r.isRx && r.m !== 1).forEach(r => {
+    parts.push(`<line class="rx-line" x1="${x(r.m).toFixed(1)}" y1="${M.t}" x2="${x(r.m).toFixed(1)}" y2="${M.t + PH}"/>`);
+  });
+
+  // stacked bands, bottom -> top: storage, writes, embedding
+  const bands = [
+    { key: "cStore", color: "var(--s-store)" },
+    { key: "cWrite", color: "var(--s-write)" },
+    { key: "cEmbed", color: "var(--s-embed)" }
+  ];
+  let lower = rows.map(() => 0);
+  bands.forEach(band => {
+    const upper = rows.map((r, i) => lower[i] + r[band.key]);
+    const top = rows.map((r, i) => `${x(r.m).toFixed(1)},${y(upper[i]).toFixed(1)}`).join(" L");
+    const bot = rows.map((r, i) => `${x(r.m).toFixed(1)},${y(lower[i]).toFixed(1)}`).reverse().join(" L");
+    parts.push(`<path d="M${top} L${bot} Z" fill="${band.color}" fill-opacity="0.72"/>`);
+    // 2px surface gap + a 2px line of the series colour on the band's own top edge
+    parts.push(`<path d="M${top}" fill="none" stroke="var(--surface)" stroke-width="3.5" stroke-linejoin="round"/>`);
+    parts.push(`<path d="M${top}" fill="none" stroke="${band.color}" stroke-width="2" stroke-linejoin="round"/>`);
+    lower = upper;
+  });
+
+  // axes
+  parts.push(`<line class="axis-line" x1="${M.l}" y1="${M.t + PH}" x2="${M.l + PW}" y2="${M.t + PH}"/>`);
+  [1, 6, 12, 18, 24, 30, 36].forEach(m => {
+    parts.push(`<text class="tick" x="${x(m).toFixed(1)}" y="${M.t + PH + 20}" text-anchor="middle">${m}</text>`);
+  });
+  parts.push(`<text class="tick" x="${M.l + PW / 2}" y="${M.t + PH + 36}" text-anchor="middle">month</text>`);
+
+  // endpoint direct label
+  const last = rows[rows.length - 1];
+  parts.push(`<line class="axis-line" x1="${x(36).toFixed(1)}" y1="${y(last.cum).toFixed(1)}" x2="${(x(36) + 10).toFixed(1)}" y2="${y(last.cum).toFixed(1)}"/>`);
+  parts.push(`<text class="end-label" x="${(x(36) + 15).toFixed(1)}" y="${(y(last.cum) + 4).toFixed(1)}">${esc(money(last.cum))}</text>`);
+  parts.push(`<text class="tick" x="${(x(36) + 15).toFixed(1)}" y="${(y(last.cum) + 19).toFixed(1)}">36-mo total</text>`);
+
+  // hover layer
+  parts.push(`<g id="cross" style="display:none"><line class="axis-line" y1="${M.t}" y2="${M.t + PH}" stroke-width="1.5"/></g>`);
+  parts.push(`<rect id="hit" x="${M.l}" y="${M.t}" width="${PW}" height="${PH}" fill="transparent" style="cursor:crosshair"/>`);
+
+  svg.innerHTML = parts.join("");
+  attachHover();
+}
+
+function attachHover() {
+  const svg = document.getElementById("chart");
+  const hit = document.getElementById("hit");
+  const cross = document.getElementById("cross");
+  const tip = document.getElementById("tip");
+  const wrap = document.getElementById("plotWrap");
+  if (!hit) return;
+
+  function show(evt) {
+    const box = svg.getBoundingClientRect();
+    const scale = box.width / W;
+    const px = (evt.clientX - box.left) / scale;
+    let m = Math.round(((px - M.l) / PW) * (MONTHS - 1)) + 1;
+    m = Math.max(1, Math.min(MONTHS, m));
+    const r = CHART_ROWS[m - 1];
+    if (!r) return;
+
+    const cx = CHART_X(m);
+    cross.style.display = "";
+    cross.querySelector("line").setAttribute("x1", cx);
+    cross.querySelector("line").setAttribute("x2", cx);
+
+    tip.innerHTML =
+      `<div class="t-month">Month ${r.m}${r.m === 1 ? " · initial build" : ""}</div>` +
+      row("var(--s-store)", "Storage", r.store) +
+      row("var(--s-write)", "Writes", r.write) +
+      row("var(--s-embed)", "Embedding", r.embed) +
+      `<div class="t-row t-tot"><span class="t-name">Cumulative</span><span class="t-val">${esc(moneyFull(r.cum))}</span></div>` +
+      (r.isRx && r.m !== 1 ? `<div class="t-rx">↻ full re-index this month</div>` : "");
+
+    const left = Math.min(Math.max(cx * scale - 90, 0), box.width - 195);
+    tip.style.left = left + "px";
+    tip.style.top = "12px";
+    tip.style.opacity = "1";
+
+    function row(c, name, v) {
+      return `<div class="t-row"><span class="t-key" style="background:${c}"></span>` +
+             `<span class="t-name">${esc(name)}</span><span class="t-val">${esc(moneyFull(v))}</span></div>`;
+    }
+  }
+  function hide() { cross.style.display = "none"; tip.style.opacity = "0"; }
+
+  hit.addEventListener("pointermove", show);
+  hit.addEventListener("pointerleave", hide);
+  wrap.addEventListener("pointerleave", hide);
+}
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function render() {
+  syncControlVisibility();
+
+  const rows = timeline();
+  const last = rows[rows.length - 1];
+  const src = S.datasetGB * GB;
+  const p = profile(src);
+  const rx = schedule();
+  const passes = rx.size + 1;
+
+  const perEmbed = embedCost(src);
+  const perWrite = writeCost(p.bytes, p.chunks);
+  const perStore = storeCost(p.bytes);
+  const amp = p.bytes / src;
+
+  // hero
+  document.getElementById("heroTotal").textContent = money(last.cum);
+  document.getElementById("heroConfig").textContent =
+    `${TYPE_LABEL[S.indexType]}${S.indexType === "dense" ? " " + S.dims + "-d" : ""} on ${VENDORS[S.vendor].name}`;
+  document.getElementById("heroSub").textContent =
+    `${moneyFull(last.cum)} over 36 months — ${passes} full index passes (1 initial + ${rx.size} re-index${rx.size === 1 ? "" : "es"}), ` +
+    `${bytes(p.bytes)} on disk from ${bytes(src)} of source.`;
+
+  // KPIs
+  set("kEmbed", money(perEmbed));
+  set("kEmbedSub", S.indexType === "sparse"
+    ? "BM25 needs no model — this is the line item sparse deletes."
+    : `per pass · ${moneyFull(perEmbed * passes)} across all ${passes} passes`);
+
+  set("kWrite", money(perWrite));
+  set("kWriteSub", `per pass · ${moneyFull(perWrite * passes)} across all ${passes} passes`);
+
+  set("kStore", money(perStore));
+  set("kStoreSub", `${moneyFull(perStore * 12)}/year · ${moneyFull(last.cStore)} over 36 months`);
+
+  set("kIndex", bytes(p.bytes));
+  set("kIndexSub", `${amp.toFixed(amp < 10 ? 2 : 0)}× write amplification · ${bytes(p.per)} per ${S.chunkKB} KB chunk`);
+
+  // chart subtitle
+  set("chartSub",
+    `Cumulative, stacked. The smooth base is storage; every step is a full corpus rewrite. ` +
+    `Re-indexes are spread evenly — one every ${(MONTHS / Math.max(1, rx.size)).toFixed(1)} months.`);
+
+  drawChart(rows);
+  drawTable(rows);
+  drawLadder();
+  drawAssumptions(p, src, perEmbed, perWrite, perStore, passes);
+
+  set("rxHint", rx.size === 0 ? "no re-index — steady state only"
+    : `every ~${(MONTHS / rx.size).toFixed(1)} months · ${rx.size + 1} total passes`);
+  set("vendorHint", `billed in ${VENDORS[S.vendor].billingUnit}`);
+  set("chunkHint", `≈ ${count(S.datasetGB * GB / (S.chunkKB * KB))} chunks of ${S.chunkKB} KB`);
+}
+function set(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
+
+function drawTable(rows) {
+  const tb = document.getElementById("tbody");
+  tb.innerHTML = rows.map(r =>
+    `<tr class="${r.isRx && r.m !== 1 ? "is-rx" : ""}">` +
+    `<td>${r.m}${r.m === 1 ? " · build" : (r.isRx ? " · re-index" : "")}</td>` +
+    `<td>${esc(moneyFull(r.store))}</td><td>${esc(moneyFull(r.write))}</td><td>${esc(moneyFull(r.embed))}</td>` +
+    `<td>${esc(moneyFull(r.total))}</td><td>${esc(moneyFull(r.cum))}</td></tr>`
+  ).join("");
+}
+
+function drawLadder() {
+  const variants = [
+    { type: "sparse", label: "sparse / BM25", sub: "postings, no model" },
+    { type: "dense", override: "dense1536", label: "dense · 1536-d", sub: "text-embedding-3-small shape" },
+    { type: "dense", override: "dense3072", label: "dense · 3072-d", sub: "text-embedding-3-large shape" },
+    { type: "multi", label: "multi-vector", sub: `${S.mvDims}-d per token` }
+  ];
+  const results = variants.map(v => {
+    const rows = timeline(v.override || v.type);
+    return { ...v, total: rows[rows.length - 1].cum };
+  });
+  const max = Math.max(...results.map(r => r.total)) || 1;
+
+  const selectedKey = S.indexType === "dense"
+    ? (S.dims === 3072 ? "dense3072" : (S.dims === 1536 ? "dense1536" : null))
+    : S.indexType;
+
+  document.getElementById("ladder").innerHTML = results.map(r => {
+    const on = (r.override || r.type) === selectedKey;
+    const pct = Math.max(0.4, (r.total / max) * 100);
+    return `<div class="lrow ${on ? "on" : ""}">
+      <span class="l-name"><b>${esc(r.label)}</b><span>${esc(r.sub)}</span></span>
+      <span class="l-track"><span class="l-fill" style="width:${pct.toFixed(2)}%"></span></span>
+      <span class="l-val">${esc(money(r.total))}</span>
+    </div>`;
+  }).join("");
+}
+
+function drawAssumptions(p, src, perEmbed, perWrite, perStore, passes) {
+  const v = VENDORS[S.vendor];
+  const chunkB = S.chunkKB * KB;
+  const q = QUANT[S.quant];
+  let shape = "";
+
+  const rescoreOn = S.quant !== "f32" && S.rescore;
+  const payloadTerm = S.keepPayload ? ` + <code>${bytes(chunkB)}</code> retained source text` : "";
+
+  if (S.indexType === "sparse") {
+    shape = `<li><b>Index size</b> — <code>${S.sparseRatio}× source</code> of postings` +
+      (S.keepPayload ? " + <code>1×</code> retained source text" : "") +
+      `. BM25 postings are a compression scheme: sub-1×.</li>`;
+  } else if (S.indexType === "multi") {
+    const tpc = chunkB / BYTES_PER_TOKEN;
+    shape = `<li><b>Index size per chunk</b> — <code>${tpc} tokens × ${S.mvDims} dims × ${q} B</code>` +
+      (rescoreOn ? ` + <code>${bytes(tpc * S.mvDims * 4)}</code> full-precision rescore copy` : "") +
+      payloadTerm +
+      ` = <b>${bytes(p.per)}</b> for a ${S.chunkKB} KB chunk. Late-interaction indexes store a vector
+      per token; graph overhead is a rounding error at this scale and is excluded.</li>`;
+  } else {
+    shape = `<li><b>Index size per chunk</b> — <code>${S.dims} dims × ${q} B = ${bytes(S.dims * q)}</code> vector` +
+      (rescoreOn ? ` + <code>${bytes(S.dims * 4)}</code> full-precision rescore copy` : "") +
+      ` + <code>${bytes(S.hnswM * 2 * 4)}</code> HNSW edges (M=${S.hnswM})` + payloadTerm +
+      ` = <b>${bytes(p.per)}</b> per ${S.chunkKB} KB chunk.</li>`;
+  }
+
+  shape += `<li><b>What's counted</b> — ${S.keepPayload
+    ? "index structures <em>plus</em> the source text you keep."
+    : "index structures only."} You keep the source whichever index you pick, so counting it adds
+    exactly 1× to every type: it shrinks the spread, changes no decision, and makes sparse read
+    ${(S.sparseRatio + 1).toFixed(1)}× when the postings list genuinely is ${S.sparseRatio}×.
+    ${S.keepPayload ? "Switch it off in Advanced" : "Switch it on in Advanced"} for the
+    ${S.keepPayload ? "comparable" : "all-in"} figure.</li>`;
+
+  document.getElementById("assumeBody").innerHTML = `
+    <h3>Index shape</h3>
+    <ul>
+      ${shape}
+      <li><b>Write amplification</b> — <code>${bytes(p.bytes)} ÷ ${bytes(src)} = ${(p.bytes / src).toFixed(2)}×</code>.
+        This is the term no vendor calculator asks for, and it sets everything below.</li>
+      <li><b>Chunking</b> — ${S.chunkKB} KB chunks, so ${count(src / chunkB)} chunks.
+        1 KB of English ≈ 250 tokens (4 bytes/token), which is also where the 250M tokens/GB embedding figure comes from.</li>
+    </ul>
+
+    <h3>${esc(v.name)} pricing</h3>
+    <ul>
+      <li>${esc(v.note)}</li>
+      <li><b>Storage</b> — ${esc(bytes(p.bytes))} → <b>${esc(moneyFull(perStore))}/month</b> (${esc(moneyFull(perStore * 12))}/year).</li>
+      <li><b>Writes</b> — <b>${esc(moneyFull(perWrite))}</b> to write the whole index once, billed again on every re-index.</li>
+      <li><b>Rate card</b> — last verified <b>${esc(v.verified)}</b> against
+        <a href="${esc(v.sources[0].url)}" rel="noopener">${esc(v.sources[0].label || "the vendor's pricing page")}</a>.
+        Wrong? <a href="${esc(REPO_URL)}/blob/main/rates/${esc(v.id)}.json" rel="noopener">Correct it in one file</a> —
+        pull requests from vendors are especially welcome.</li>
+    </ul>
+
+    <h3>Embedding</h3>
+    <ul>
+      <li>$${S.embedRate}/M tokens × ${(src / BYTES_PER_TOKEN / 1e9).toFixed(1)}B tokens =
+        <b>${esc(moneyFull(perEmbed))}</b> per pass${S.indexType === "sparse" ? " — zero, because BM25 has no model" : ""}.</li>
+      <li>Quantization does <b>not</b> reduce this. The model emits every dimension at full rate; you pay
+        for all of them and then discard some at index time.</li>
+      <li>Multi-vector rates are the crudest part of this model — priced here at the same per-token rate as
+        dense, which is a floor. ColPali-style page embedding is usually self-hosted GPU time instead.</li>
+    </ul>
+
+    <h3>Timeline</h3>
+    <ul>
+      <li>36 months. Month 1 is the initial build; ${schedule().size} re-index${schedule().size === 1 ? "" : "es"}
+        spread evenly after it — <b>${passes} full passes</b> of embedding and writes in total.</li>
+      <li>Corpus growth ${S.growth}%/month${S.growth > 0 ? " — incremental writes and embeddings are charged monthly on the delta" : ""}.</li>
+      <li>Monthly platform minimums are applied${v.min ? ` (${esc(v.name)}: $${v.min}/mo)` : " (none for topk)"}; at this corpus size they rarely bind.</li>
+      <li><b>Queries are not modelled.</b> They are real and every vendor prices them, but they scale with
+        traffic, not with your corpus — and they are not what surprises people on the invoice.</li>
+    </ul>`;
+}
+
+/* ============================================================
+   CONTROLS
+   ============================================================ */
+function syncControlVisibility() {
+  show("fDims", S.indexType === "dense");
+  show("fMvDims", S.indexType === "multi");
+  show("fQuant", S.indexType !== "sparse");
+  // The write-path selector only exists for vendors that sell more than one way
+  // in. That was Pinecone alone when this was written, but it is a property of
+  // the rate card now, not a name check.
+  const paths = VENDORS[S.vendor].write.paths;
+  show("fPath", paths.length > 1);
+  const rw = document.getElementById("rescoreWrap");
+  rw.hidden = !(S.indexType !== "sparse" && S.quant !== "f32");
+}
+function show(id, on) { const el = document.getElementById(id); if (el) el.hidden = !on; }
+
+/** Rebuild the write-path buttons for the current vendor. */
+function renderPaths() {
+  const card = VENDORS[S.vendor];
+  const paths = card.write.paths;
+  if (!paths.some(p => p.id === S.path)) S.path = paths[0].id;
+  set("pathLabel", card.write.label || "Write path");
+  document.getElementById("segPath").innerHTML = paths.map(p =>
+    `<button data-v="${esc(p.id)}" aria-pressed="${p.id === S.path}">${esc(p.label || p.id)}</button>`
+  ).join("");
+}
+
+function seg(id, key, after) {
+  document.getElementById(id).addEventListener("click", e => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    S[key] = b.dataset.v;
+    [...e.currentTarget.querySelectorAll("button")].forEach(x =>
+      x.setAttribute("aria-pressed", String(x === b)));
+    if (after) after();
+    render();
+  });
+}
+function num(id, key, tf) {
+  document.getElementById(id).addEventListener("input", e => {
+    const v = parseFloat(e.target.value);
+    if (!isFinite(v)) return;
+    S[key] = tf ? tf(v) : v;
+    render();
+  });
+}
+
+seg("segIndex", "indexType");
+seg("segVendor", "vendor", renderPaths);
+seg("segPath", "path");
+
+function readSize() {
+  const v = parseFloat(document.getElementById("size").value);
+  const u = parseFloat(document.getElementById("sizeUnit").value);
+  if (isFinite(v) && v > 0) S.datasetGB = v * u;
+  render();
+}
+document.getElementById("size").addEventListener("input", readSize);
+document.getElementById("sizeUnit").addEventListener("change", readSize);
+
+document.getElementById("dims").addEventListener("change", e => { S.dims = +e.target.value; render(); });
+document.getElementById("mvDims").addEventListener("change", e => { S.mvDims = +e.target.value; render(); });
+document.getElementById("quant").addEventListener("change", e => { S.quant = e.target.value; render(); });
+document.getElementById("rescore").addEventListener("change", e => { S.rescore = e.target.checked; render(); });
+document.getElementById("keepPayload").addEventListener("change", e => { S.keepPayload = e.target.checked; render(); });
+num("reindexes", "reindexes", v => Math.max(0, Math.min(35, Math.round(v))));
+num("chunk", "chunkKB", v => Math.max(0.05, v));
+num("hnsw", "hnswM", v => Math.max(0, Math.round(v)));
+num("sparseRatio", "sparseRatio", v => Math.max(0.01, v));
+num("growth", "growth", v => Math.max(0, Math.min(50, v)));
+
+document.getElementById("embed").addEventListener("change", e => {
+  const custom = e.target.value === "custom";
+  document.getElementById("fCustomRate").hidden = !custom;
+  S.embedRate = custom ? parseFloat(document.getElementById("customRate").value) || 0 : parseFloat(e.target.value);
+  render();
+});
+document.getElementById("customRate").addEventListener("input", e => {
+  const v = parseFloat(e.target.value);
+  if (isFinite(v)) { S.embedRate = v; render(); }
+});
+
+document.getElementById("tblBtn").addEventListener("click", e => {
+  const on = e.currentTarget.getAttribute("aria-pressed") === "true";
+  e.currentTarget.setAttribute("aria-pressed", String(!on));
+  document.getElementById("tableView").hidden = on;
+});
+
+window.addEventListener("resize", () => { if (CHART_ROWS.length) drawChart(CHART_ROWS); });
+
+renderPaths();
+render();
+</script>
+</body>
+</html>

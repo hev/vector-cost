@@ -1,0 +1,103 @@
+#!/usr/bin/env node
+// Inline the rate cards into the calculator and write dist/index.html.
+//
+//   bin/build            # write dist/index.html
+//   bin/build --check    # fail if dist/ is stale (this is what CI runs)
+//
+// The output is a single self-contained file with no network dependencies, so
+// it can be dropped into any static host — which is exactly how hevmind.com and
+// the workshops deck consume it.
+//
+// The build is deterministic on purpose: provenance is a digest of the rate
+// cards, never a timestamp. A timestamp would make every build a diff, and then
+// `--check` could not tell "someone edited a rate and forgot to rebuild" from
+// "someone ran the build twice".
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { loadRates, ROOT } from "./lib.mjs";
+
+const check = process.argv.includes("--check");
+const SRC = join(ROOT, "src", "calculator.html");
+const OUT = join(ROOT, "dist", "index.html");
+
+let cards, defaultVendor;
+try {
+	({ cards, defaultVendor } = loadRates());
+} catch (e) {
+	console.error(`\n  ✗ ${e.message}\n`);
+	process.exit(1);
+}
+
+const template = readFileSync(SRC, "utf8");
+
+// Digest the cards as they will be embedded, so any change to a priced field
+// moves it. Formatting-only edits to the JSON files do not.
+const canonical = JSON.stringify(cards);
+const digest = createHash("sha256").update(canonical).digest("hex").slice(0, 12);
+
+const provenance =
+	`${cards.length} rate card${cards.length === 1 ? "" : "s"} · ` +
+	`${cards.map((c) => c.id).join(", ")} · digest ${digest}`;
+
+const buttons = cards
+	.map((c) => `<button data-v="${attr(c.id)}" aria-pressed="${c.id === defaultVendor}">${escapeHtml(c.name)}</button>`)
+	.join("\n          ");
+
+const out = template
+	.replace("@@PROVENANCE@@", provenance)
+	.replace("@@RATES@@", js(cards))
+	.replace("@@DEFAULT_VENDOR@@", JSON.stringify(defaultVendor))
+	.replace("<!-- @@VENDOR_BUTTONS@@ -->", buttons);
+
+for (const marker of ["@@PROVENANCE@@", "@@RATES@@", "@@DEFAULT_VENDOR@@", "@@VENDOR_BUTTONS@@"]) {
+	if (out.includes(marker)) {
+		console.error(`\n  ✗ src/calculator.html still contains ${marker} after substitution\n`);
+		process.exit(1);
+	}
+}
+
+const prev = existsSync(OUT) ? readFileSync(OUT, "utf8") : null;
+
+if (check) {
+	if (prev === out) {
+		console.log(`\n  ✓ dist/index.html is current · ${provenance}\n`);
+		process.exit(0);
+	}
+	console.error(
+		"\n  ✗ dist/index.html is stale — a rate card or the template changed without a rebuild." +
+			"\n    Run `bin/build` and commit the result.\n",
+	);
+	process.exit(1);
+}
+
+if (prev === out) {
+	console.log(`\n  = dist/index.html unchanged · ${provenance}\n`);
+	process.exit(0);
+}
+
+mkdirSync(join(ROOT, "dist"), { recursive: true });
+writeFileSync(OUT, out);
+console.log(`\n  → dist/index.html · ${provenance}`);
+console.log(`    ${(out.length / 1024).toFixed(0)} KB, self-contained\n`);
+
+/**
+ * Embed JSON as a JS literal, kept safe inside a <script> block: a `<` would let
+ * a note containing "</script>" close the block early, and U+2028/U+2029 are line
+ * terminators to a JS parser even though JSON.stringify emits them raw.
+ */
+const JS_UNSAFE = {
+	"<": "\\u003c",
+	[String.fromCharCode(0x2028)]: "\\u2028",
+	[String.fromCharCode(0x2029)]: "\\u2029",
+};
+function js(value) {
+	const re = new RegExp(`[<${String.fromCharCode(0x2028)}${String.fromCharCode(0x2029)}]`, "g");
+	return JSON.stringify(value, null, 2).replace(re, (c) => JS_UNSAFE[c]);
+}
+function escapeHtml(s) {
+	return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+}
+function attr(s) {
+	return escapeHtml(s);
+}

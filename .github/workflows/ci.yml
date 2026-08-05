@@ -1,0 +1,46 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  rates:
+    name: rate cards
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # Validates every card: units, required fields, at least one rate
+      # component per write path, a source URL, a verified date.
+      - name: Validate rate cards
+        run: node bin/check
+
+      # The failure this catches: a rate correction gets merged and dist/ never
+      # gets rebuilt, so every consumer keeps serving the old price.
+      - name: dist/ matches rates/
+        run: node bin/build --check
+
+      # The model is executed by a downstream verifier that gates a talk's slide
+      # figures. If this block stops being extractable, that breaks silently
+      # somewhere else, so assert the contract here.
+      - name: Model block stays extractable
+        run: |
+          node --input-type=module -e '
+            import { readFileSync } from "node:fs";
+            const html = readFileSync("dist/index.html", "utf8");
+            const from = html.indexOf("const MONTHS = 36;");
+            const to = html.indexOf("/* ============================================================\n   FORMATTING");
+            if (from < 0 || to < 0) throw new Error("model block markers not found in dist/index.html");
+            const names = ["S","profile","embedCost","writeCost","storeCost","schedule","timeline","GB","VENDORS","RATES"];
+            const m = new Function(html.slice(from, to) + "\nreturn {" + names.join(",") + "};")();
+            for (const n of names) if (m[n] === undefined) throw new Error("model no longer exports " + n);
+            m.S.datasetGB = 1000;
+            const total = m.timeline().at(-1).cum;
+            if (!isFinite(total) || total <= 0) throw new Error("model produced a nonsense total: " + total);
+            console.log("model block ok — " + Object.keys(m.VENDORS).length + " vendors, 1 TB dense = $" + Math.round(total).toLocaleString());
+          '

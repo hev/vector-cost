@@ -1,0 +1,30 @@
+{
+	"id": "topk",
+	"name": "topk",
+	"homepage": "https://topk.io",
+	"billingUnit": "GiB",
+	"storage": {
+		"perUnitMonth": 0.1
+	},
+	"write": {
+		"paths": [
+			{
+				"id": "write",
+				"label": "write",
+				"perUnit": 0.5,
+				"perThousandRequests": 0.01
+			}
+		]
+	},
+	"minimumMonthly": 0,
+	"note": "$0.10/GiB-month stored · $0.50/GiB write data + $0.01 per 1K write requests · no minimum.",
+	"verified": "2026-08-05",
+	"sources": [
+		{
+			"label": "topk pricing",
+			"url": "https://topk.io/pricing",
+			"retrieved": "2026-08-05",
+			"note": "Billed in GiB, not GB — the only vendor here that is. Roughly a 7% difference against the others."
+		}
+	]
+}

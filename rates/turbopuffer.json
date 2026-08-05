@@ -1,0 +1,29 @@
+{
+	"id": "turbopuffer",
+	"name": "turbopuffer",
+	"homepage": "https://turbopuffer.com",
+	"billingUnit": "GB",
+	"storage": {
+		"perUnitMonth": 0.33
+	},
+	"write": {
+		"paths": [
+			{
+				"id": "write",
+				"label": "write",
+				"perUnit": 2.0
+			}
+		]
+	},
+	"minimumMonthly": 16,
+	"note": "≤$0.33/GB-month stored · ≤$2.00/GB written · $16/mo minimum (Launch). Rates are ceilings from turbopuffer's own calculator; they fall at volume.",
+	"verified": "2026-08-05",
+	"sources": [
+		{
+			"label": "turbopuffer pricing",
+			"url": "https://turbopuffer.com/pricing",
+			"retrieved": "2026-08-05",
+			"note": "The storage and write rates are not page text — they appear only inside the pricing calculator widget."
+		}
+	]
+}

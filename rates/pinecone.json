@@ -1,0 +1,36 @@
+{
+	"id": "pinecone",
+	"name": "Pinecone",
+	"homepage": "https://www.pinecone.io",
+	"billingUnit": "GB",
+	"storage": {
+		"perUnitMonth": 0.33
+	},
+	"write": {
+		"label": "Pinecone write path",
+		"paths": [
+			{
+				"id": "upsert",
+				"label": "upsert",
+				"writeUnitBytes": 1024,
+				"perMillionWriteUnits": 4.0
+			},
+			{
+				"id": "import",
+				"label": "bulk import",
+				"perUnit": 0.25
+			}
+		]
+	},
+	"minimumMonthly": 50,
+	"note": "$0.33/GB-month stored · upsert billed in Write Units at 1 WU per 1 KB, $4.00/M (Standard) ≈ $3.91/GB · bulk Import $0.25/GB · $50/mo minimum.",
+	"verified": "2026-08-05",
+	"sources": [
+		{
+			"label": "Pinecone pricing",
+			"url": "https://www.pinecone.io/pricing/",
+			"retrieved": "2026-08-05",
+			"note": "Upsert is metered in Write Units (1 WU per 1 KB, 1 KB = 1024 B), which is why this card carries writeUnitBytes rather than a flat per-GB rate."
+		}
+	]
+}

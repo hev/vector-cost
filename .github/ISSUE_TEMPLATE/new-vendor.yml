@@ -1,0 +1,51 @@
+name: Add a vendor
+description: A vector database that should be in the comparison but isn't.
+title: "rates: add <vendor>"
+labels: ["pricing", "new-vendor"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Adding a vendor is a single new file in
+        [`rates/`](https://github.com/hev/vector-cost/tree/main/rates) — see the
+        [schema](https://github.com/hev/vector-cost/blob/main/rates/README.md).
+        PRs welcome, including from the vendor.
+
+        The one hard requirement: the pricing has to be **publicly documented**,
+        so a reader can check it. A rate you only get on a sales call isn't
+        something this can carry.
+
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor name
+    validations:
+      required: true
+
+  - type: input
+    id: pricing
+    attributes:
+      label: Public pricing page
+      placeholder: https://…/pricing
+    validations:
+      required: true
+
+  - type: textarea
+    id: shape
+    attributes:
+      label: How does it bill?
+      description: |
+        Storage rate and unit (GB or GiB), write rate, any per-request fee, any
+        monthly minimum. If there is more than one way to write (e.g. streaming
+        upsert vs bulk import), list them separately.
+    validations:
+      required: true
+
+  - type: textarea
+    id: mismatch
+    attributes:
+      label: Anything the schema can't express?
+      description: |
+        The schema covers per-unit rates, write units, and per-request fees, in
+        GB or GiB. If this vendor's pricing doesn't fit that, describe it — the
+        fix is a new declarative field, not a special case.

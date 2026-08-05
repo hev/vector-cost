@@ -1,0 +1,5 @@
+{
+	"$comment": "Editorial choices, not vendor data. Vendors own rates/<id>.json and should never need to touch this file. A vendor added to rates/ but missing from `order` is appended alphabetically, so a new rate card is a one-file pull request.",
+	"defaultVendor": "turbopuffer",
+	"order": ["turbopuffer", "topk", "pinecone"]
+}

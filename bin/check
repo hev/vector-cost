@@ -1,0 +1,61 @@
+#!/usr/bin/env node
+// Validate every rate card and show what it actually prices out to.
+//
+//   bin/check
+//
+// Run this after editing a card. The per-GB column is the point: vendors bill in
+// units that aren't comparable (GB vs GiB, write units vs flat rates), and the
+// only way to see whether a correction did what you meant is to normalize them.
+// Exits non-zero if any card is invalid, so CI can gate a pull request on it.
+import { loadRates, pathCost, UNITS } from "./lib.mjs";
+
+let rates;
+try {
+	rates = loadRates();
+} catch (e) {
+	console.error(`\n  ✗ ${e.message}\n`);
+	process.exit(1);
+}
+const { cards, defaultVendor } = rates;
+
+const GB = 1e9;
+const CHUNK = 1000; // 1 KB chunks, matching the calculator's default
+const money = (n) => (n >= 100 ? `$${n.toFixed(0)}` : n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`);
+
+console.log(`\n  ${cards.length} rate card(s) · default vendor: ${defaultVendor}\n`);
+
+for (const c of cards) {
+	const storePerGB = (GB / UNITS[c.billingUnit]) * c.storage.perUnitMonth;
+	const stale = ageInDays(c.verified);
+
+	console.log(`  ${c.name}  ·  billed in ${c.billingUnit}${c.id === defaultVendor ? "  (default)" : ""}`);
+	console.log(`      storage   ${money(c.storage.perUnitMonth)}/${c.billingUnit}-month` + pad(c.billingUnit === "GB" ? "" : `  → ${money(storePerGB)}/GB-month`));
+	for (const p of c.write.paths) {
+		const perGB = pathCost(c, p, GB, GB / CHUNK);
+		const bits = [];
+		if (p.perUnit) bits.push(`${money(p.perUnit)}/${c.billingUnit}`);
+		if (p.perMillionWriteUnits) bits.push(`${money(p.perMillionWriteUnits)}/M WU @ ${p.writeUnitBytes} B`);
+		if (p.perThousandRequests) bits.push(`${money(p.perThousandRequests)}/1K req`);
+		const isDefault = p.id === c.write.paths[0].id;
+		console.log(`      write     ${(p.label || p.id).padEnd(12)} ${bits.join(" + ").padEnd(30)} → ${money(perGB)}/GB${isDefault ? "  (default path)" : ""}`);
+	}
+	console.log(`      minimum   ${c.minimumMonthly ? `${money(c.minimumMonthly)}/month` : "none"}`);
+	console.log(`      verified  ${c.verified}${stale > 180 ? `   ⚠ ${stale} days ago — worth re-checking` : ""}`);
+	console.log(`      source    ${c.sources[0].url}`);
+	console.log("");
+}
+
+// The talk this was built for quotes a cross-vendor average, so print it here
+// too — it is the one figure that silently goes stale when a card changes.
+const nominal = cards.map((c) => c.storage.perUnitMonth);
+const mean = nominal.reduce((a, b) => a + b, 0) / nominal.length;
+console.log(`  mean nominal storage rate: ${money(mean)}/unit-month  (${nominal.map((n) => money(n)).join(", ")})`);
+console.log(`\n  all ${cards.length} card(s) valid\n`);
+
+function pad(s) {
+	return s;
+}
+function ageInDays(iso) {
+	const then = Date.parse(`${iso}T00:00:00Z`);
+	return Math.floor((Date.now() - then) / 86400000);
+}
