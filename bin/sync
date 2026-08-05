@@ -15,11 +15,6 @@ import { ROOT } from "./lib.mjs";
 const WORKSPACE = join(ROOT, "..");
 const CONSUMERS = [
 	{
-		repo: "workshops",
-		path: join(WORKSPACE, "workshops", "decks", "choosing-a-vector-database", "assets", "calculator.html"),
-		why: "deck asset — bin/verify gates the slide figures against this file",
-	},
-	{
 		repo: "mind",
 		path: join(WORKSPACE, "mind", "site", "public", "research", "vector-cost", "index.html"),
 		why: "hevmind.com/research/vector-cost",
@@ -84,9 +79,11 @@ if (wrote) {
 	console.log(`\n  ${wrote} file(s) written. Commit them in their own repos:`);
 	for (const c of CONSUMERS) console.log(`    cd ../${c.repo} && git add -A && git commit`);
 	console.log("");
-	if (existsSync(join(WORKSPACE, "workshops", "bin", "verify"))) {
-		console.log("  The deck's figures are gated on this file — re-run its check:");
-		console.log("    cd ../workshops && node bin/verify choosing-a-vector-database\n");
+	// The talk's slide figures are derived from this model, and nothing over
+	// there checks them — this is the only reminder.
+	if (existsSync(join(WORKSPACE, "workshops"))) {
+		console.log("  Slide figures downstream depend on these numbers — re-check them:");
+		console.log("    node bin/verify-deck\n");
 	}
 } else if (!missing) {
 	console.log("\n  nothing to do — every consumer already matches.\n");

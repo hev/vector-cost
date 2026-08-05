@@ -1,0 +1,190 @@
+#!/usr/bin/env node
+// Check a talk's slide figures against this calculator's model.
+//
+//   bin/verify-deck                     # the default deck path below
+//   bin/verify-deck path/to/slides.md
+//
+// Both sides are read from source — the model is sliced out of dist/index.html,
+// the figures are parsed out of the slides — so a number cannot move on one side
+// without failing here. Written after a ladder slide and the calculator spent a
+// day disagreeing about whether the retained source text counts.
+//
+// This lives here rather than beside the deck because the numbers originate
+// here: a merged rate correction changes the arithmetic on someone's slide, and
+// this is the only thing that notices. It is intentionally NOT in CI — it needs
+// a deck checked out, which no CI runner has. Run it after changing a rate.
+//
+// It is deliberately tolerant of decks it doesn't recognize: a slides.md without
+// the expected markup is skipped, not failed.
+import { readFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { ROOT } from "./lib.mjs";
+
+const DEFAULT_DECK = join(ROOT, "..", "workshops", "decks", "choosing-a-vector-database", "slides.md");
+const slides = process.argv[2] || DEFAULT_DECK;
+
+function die(msg) {
+	console.error(`error: ${msg}`);
+	process.exit(1);
+}
+function skip(msg) {
+	console.log(`\n  · ${msg}\n`);
+	process.exit(0);
+}
+
+if (!existsSync(slides)) {
+	skip(`no deck at ${slides} — nothing to check (pass a path to slides.md)`);
+}
+const calc = join(ROOT, "dist", "index.html");
+if (!existsSync(calc)) die("dist/index.html does not exist — run bin/build first");
+
+const md = readFileSync(slides, "utf8");
+const html = readFileSync(calc, "utf8");
+
+// Lift the model out of the built page rather than reimplementing it — a
+// reimplementation would drift from the thing it is supposed to be checking.
+const from = html.indexOf("const MONTHS = 36;");
+const to = html.indexOf("/* ============================================================\n   FORMATTING");
+if (from < 0 || to < 0) die("could not locate the model block in dist/index.html");
+const { S, profile, embedCost, schedule, timeline, GB, RATES } = new Function(
+	`${html.slice(from, to)}\nreturn {S,profile,embedCost,writeCost,storeCost,schedule,timeline,GB,RATES};`,
+)();
+
+let fails = 0;
+function near(got, want, tol, label) {
+	const ok = Math.abs(got - want) <= tol;
+	if (!ok) fails++;
+	const g = typeof got === "number" ? +got.toFixed(4) : got;
+	console.log(`  ${ok ? "ok  " : "FAIL"}  ${label.padEnd(42)} ${g} vs ${want}`);
+}
+function reset() {
+	Object.assign(S, {
+		datasetGB: 1, indexType: "dense", dims: 1536, mvDims: 128, quant: "f32", rescore: false,
+		vendor: "turbopuffer", path: "upsert", reindexes: 10, embedRate: 0.02,
+		chunkKB: 1, hnswM: 16, sparseRatio: 0.3, growth: 0, keepPayload: false,
+	});
+}
+const perGB = (type, dims) => {
+	S.indexType = type;
+	if (dims) S.dims = dims;
+	return profile(GB).bytes / GB;
+};
+
+// ---- what the slides claim ------------------------------------------------
+const barGB = [...md.matchAll(/<span class="bar-val" style="text-align:right">([\d.]+) GB<\/span>/g)].map((m) =>
+	parseFloat(m[1]),
+);
+const widths = [...md.matchAll(/bar-fill" style="width:([\d.]+)%/g)].map((m) => parseFloat(m[1]));
+const stats = [...md.matchAll(/<span class="stat-num">\$([\d.]+)(K?)<\/span>/g)].map(
+	(m) => parseFloat(m[1]) * (m[2] === "K" ? 1000 : 1),
+);
+if (barGB.length !== 4 || widths.length !== 4 || stats.length !== 3) {
+	skip(`${slides} is not the vector-cost deck (no ladder bars / stat tiles) — skipped`);
+}
+
+console.log(`\n${slides.replace(`${join(ROOT, "..")}/`, "")} — slides vs dist/index.html\n`);
+
+console.log("ladder · per 1 GB of source, index structures only");
+reset();
+near(perGB("sparse"), barGB[0], 0.05, "sparse");
+near(perGB("dense", 1536), barGB[1], 0.05, "dense 1536-d");
+near(perGB("dense", 3072), barGB[2], 0.05, "dense 3072-d");
+near(perGB("multi"), barGB[3], 0.05, "multi-vector");
+barGB.forEach((gb, i) => near(widths[i], (gb / barGB[3]) * 100, 0.05, `bar ${i + 1} width is linear`));
+
+console.log("\nthe retained source is the same 1x on every row");
+reset();
+S.keepPayload = true;
+near(perGB("sparse"), barGB[0] + 1, 0.05, "sparse all-in");
+near(perGB("dense", 1536), barGB[1] + 1, 0.05, "dense all-in");
+near(perGB("multi"), barGB[3] + 1, 0.05, "multi-vector all-in");
+
+// The deck quotes a cross-vendor average and each vendor's rate as prose. Those
+// are hand-copied, which means a rate correction merged here would otherwise
+// leave the slide quietly wrong — the single most likely way this repo breaks
+// something outside it.
+//
+// One sentence on the ladder-with-prices slide is the authority, and it is
+// parsed as a whole rather than by hunting each vendor name through 800 lines:
+//   "average vendor storage cost of $0.25/GB-month — Pinecone $0.33, ... "
+console.log("\nthe rate cards behind the deck's average");
+const avg = md.match(
+	/average vendor storage cost of <strong>\$([\d.]+)\/GB-month<\/strong>\s*—\s*([^.]*(?:\.\d+[^.]*)*)\./,
+);
+if (!avg) die("could not find the sentence stating the deck's average vendor storage cost");
+const quotedAvg = parseFloat(avg[1]);
+const quoted = new Map(
+	[...avg[2].matchAll(/([A-Za-z][\w-]*)\s+\$(\d+(?:\.\d+)?)/g)].map((m) => [m[1].toLowerCase(), parseFloat(m[2])]),
+);
+
+near(quoted.size, RATES.length, 0, `the slide names ${quoted.size} vendors, the calculator ships ${RATES.length}`);
+for (const card of RATES) {
+	const got = quoted.get(card.name.toLowerCase());
+	if (got === undefined) {
+		fails++;
+		console.log(`  FAIL  ${`slide names a rate for ${card.name}`.padEnd(42)} absent from that sentence`);
+		continue;
+	}
+	near(got, card.storage.perUnitMonth, 0.001, `${card.name} quoted at its rate-card rate`);
+}
+// The slide rounds the mean to the cent it then does arithmetic with, so check
+// the rounding — not equality. If a rate moves enough to change that cent, this
+// fails and the slide has to be rewritten, which is the point.
+const mean = RATES.reduce((a, c) => a + c.storage.perUnitMonth, 0) / RATES.length;
+near(Math.round(mean * 100) / 100, quotedAvg, 0.0001, `mean of the cards (${mean.toFixed(4)}) rounds to the quoted average`);
+
+// Everything below prices at the figure actually printed on the slide, so the
+// stat tiles are checked on the deck's own basis rather than the unrounded mean.
+console.log(`\nstorage bill · 1 TB at the $${quotedAvg.toFixed(2)}/GB-month deck average`);
+reset();
+const yr = (type, dims) => perGB(type, dims) * 1000 * quotedAvg * 12;
+near(yr("sparse"), stats[0], 20, "sparse $/year");
+near(yr("dense", 1536), stats[1], 60, "dense $/year");
+near(yr("multi"), stats[2], 200, "multi-vector $/year");
+const sparseGB = perGB("sparse");
+const denseGB = perGB("dense", 1536);
+const mvGB = perGB("multi");
+near(mvGB / sparseGB, +md.match(/annual bill <strong>(\d+)×<\/strong>/)[1], 1, "end-to-end spread");
+near(mvGB / denseGB, +md.match(/(\d+)× on the dense → multi-vector step/)[1], 0.5, "dense → multi-vector step");
+
+console.log("\nembedding · OpenAI published per-million rates");
+reset();
+S.embedRate = 0.02;
+near(embedCost(1000 * GB), 5000, 1, "1 TB on 3-small");
+near(embedCost(1000 * GB) * 11, 55000, 10, "1 TB × 11 passes");
+S.embedRate = 0.13;
+near(embedCost(1000 * GB), 32500, 10, "1 TB on 3-large");
+near(embedCost(1000 * GB) * 11, 357500, 50, "1 TB × 11 passes");
+S.indexType = "sparse";
+near(embedCost(1000 * GB), 0, 0, "sparse costs nothing to embed");
+
+console.log("\nquantization · the ColPali page");
+near((1030 * 128 * 4) / 1000, +md.match(/ColPali, 1030 × 128-d f32 = \*\*(\d+) KB\*\*/)[1], 0.5, "1030 × 128-d f32 KB");
+near((1030 * 128 * 4) / (1030 * 128 * 0.125), 32, 0.01, "binary is a 32× cut");
+reset();
+S.quant = "binary";
+S.rescore = true;
+const both = perGB("multi");
+reset();
+near(both > perGB("multi"), true, 0, "binary + rescore exceeds plain f32");
+
+console.log("\ntimeline · 10 re-indexes over 36 months");
+reset();
+const sched = [...schedule()].sort((a, b) => a - b);
+near(sched.length, 10, 0, `evenly spread: ${sched.join(", ")}`);
+
+reset();
+S.datasetGB = 1000;
+const idx = profile(1000 * GB);
+const last = timeline().at(-1);
+const tp = RATES.find((c) => c.id === "turbopuffer");
+const tpWrite = tp?.write.paths[0].perUnit ?? 2.0;
+near(last.cWrite, (idx.bytes / GB) * tpWrite * 11, 5, `writes = 11 × index GB × $${tpWrite.toFixed(2)}`);
+near(last.cEmbed, 5000 * 11, 5, "embedding = 11 × $5,000");
+console.log(
+	`\n  1 TB dense 1536 on turbopuffer: ${(idx.bytes / GB).toFixed(0)} GB indexed ` +
+		`(${(idx.bytes / (1000 * GB)).toFixed(2)}×), $${Math.round(last.cum).toLocaleString()} over 36 months`,
+);
+
+console.log(fails ? `\n${fails} check(s) FAILED — slides and calculator disagree\n` : "\nall checks pass\n");
+process.exit(fails ? 1 : 0);

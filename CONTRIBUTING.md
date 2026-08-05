@@ -67,8 +67,14 @@ checks it matches. Plain node, no dependencies, no package.json; please keep it
 that way.
 
 There's one non-obvious constraint. The block between `const MONTHS = 36;` and
-the `FORMATTING` banner is extracted and executed by a downstream verifier that
-gates a conference talk's slide figures against this model. It needs to keep
-exporting `S`, `profile`, `embedCost`, `writeCost`, `storeCost`, `schedule`,
-`timeline`, `GB`, `VENDORS`, and `RATES`, and it must stay free of DOM access.
-Reorganize inside it freely; just don't move those names out of it.
+the `FORMATTING` banner is extracted and executed on its own — by `bin/test`,
+by CI, and by `bin/verify-deck`, which checks a conference talk's slide figures
+against this model. It needs to keep exporting `S`, `profile`, `embedCost`,
+`writeCost`, `storeCost`, `schedule`, `timeline`, `GB`, `VENDORS`, and `RATES`,
+and it must stay free of DOM access. Reorganize inside it freely; just don't
+move those names out of it.
+
+`bin/verify-deck` needs a deck checked out beside this repo, so it can't run in
+CI and is skipped when there isn't one. If you change a **rate**, run it — a
+corrected price changes the arithmetic on someone's slide, and this is the only
+thing that notices.

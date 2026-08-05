@@ -77,13 +77,21 @@
   }
   .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 72px; }
 
+  .page-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin: 0 0 10px;
+  }
   .kicker {
     font-family: var(--mono);
     font-size: 0.72rem;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--signal);
-    margin: 0 0 10px;
+    margin: 0;
   }
   h1 {
     font-family: var(--mono);
@@ -93,8 +101,12 @@
     margin: 0 0 12px;
     font-weight: 700;
     letter-spacing: -0.01em;
+    text-wrap: balance;
   }
-  .lede { color: var(--muted); max-width: 62ch; margin: 0 0 28px; }
+  .lede { color: var(--muted); max-width: 62ch; margin: 0 0 28px; text-wrap: pretty; }
+  /* Keeps a single word from stranding on its own last line across the copy
+     that actually flows — subtitles, hints, and the assumptions panel. */
+  .card-sub, .hero-sub, .kpi .k-sub, .hint, .assume li, .foot-line { text-wrap: pretty; }
   h2 {
     font-family: var(--mono);
     font-size: 0.78rem;
@@ -250,10 +262,12 @@
 
   /* ---------- ladder ---------- */
   .ladder { display: flex; flex-direction: column; gap: 11px; }
-  .lrow { display: grid; grid-template-columns: 12.5em 1fr 6.2em; gap: 12px; align-items: center; }
+  /* The label column has to clear "text-embedding-3-small shape" — the longest
+     string on the page — without breaking it mid-token. */
+  .lrow { display: grid; grid-template-columns: 16em 1fr 6.2em; gap: 12px; align-items: center; }
   .lrow .l-name { font-size: 0.84rem; color: var(--ink-soft); }
   .lrow .l-name b { display: block; color: var(--ink); font-weight: 600; }
-  .lrow .l-name span { font-size: 0.76rem; color: var(--muted); }
+  .lrow .l-name span { display: block; font-size: 0.76rem; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
   .l-track { display: block; background: var(--paper-warm); border-radius: 4px; height: 22px; position: relative; overflow: hidden; }
   .l-fill { display: block; height: 100%; min-width: 3px; border-radius: 0 4px 4px 0; background: var(--deemph); }
   .lrow.on .l-fill { background: var(--signal); }
@@ -296,6 +310,7 @@
   }
   a.gh:hover { border-color: var(--axis); color: var(--ink); }
   a.gh svg { flex: none; }
+  a.gh span { white-space: nowrap; }
   @media (max-width: 640px) {
     .lrow { grid-template-columns: 1fr; gap: 4px; }
     .lrow .l-val { text-align: left; }
@@ -305,7 +320,13 @@
 <body>
 <div class="wrap">
 
-  <p class="kicker">hev mind · vector index cost</p>
+  <div class="page-head">
+    <p class="kicker">hev mind · vector index cost</p>
+    <a class="gh" href="https://github.com/hev/vector-cost" rel="noopener" aria-label="hev/vector-cost on GitHub">
+      <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
+      <span>hev/vector-cost</span>
+    </a>
+  </div>
   <h1>What your index actually costs, month 1 to month 36</h1>
   <p class="lede">
     Vendor calculators quote you a month you will never have. Start from the one number you
@@ -531,15 +552,11 @@
       version is to sample 20–100&nbsp;GB of your own corpus and measure it.
     </p>
     <p class="foot-line">
-      Every rate on this page is a JSON file you can correct.
-      <b>If we've got your pricing wrong, open a pull request</b> — that is what the repo is for.
+      Every rate on this page is a JSON file you can correct. If we've got your pricing wrong,
+      <a href="https://github.com/hev/vector-cost/tree/main/rates" rel="noopener">open a pull request</a>
+      — that is what the repo is for.
     </p>
     <p class="foot-links">
-      <a class="gh" href="https://github.com/hev/vector-cost" rel="noopener">
-        <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"></path></svg>
-        <span>hev/vector-cost</span>
-      </a>
-      <span class="dot" aria-hidden="true">·</span>
       <a href="https://hevmind.com">hevmind.com</a>
     </p>
   </footer>
