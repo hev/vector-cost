@@ -20,6 +20,8 @@ const { cards, defaultVendor } = rates;
 
 const GB = 1e9;
 const CHUNK = 1000; // 1 KB chunks, matching the calculator's default
+const INDEX_TYPES = ["sparse", "dense", "multi"];
+const QUANT_IDS = ["f32", "int8", "binary"];
 const money = (n) => (n >= 100 ? `$${n.toFixed(0)}` : n >= 1 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`);
 
 console.log(`\n  ${cards.length} rate card(s) · default vendor: ${defaultVendor}\n`);
@@ -36,8 +38,23 @@ for (const c of cards) {
 		if (p.perUnit) bits.push(`${money(p.perUnit)}/${c.billingUnit}`);
 		if (p.perMillionWriteUnits) bits.push(`${money(p.perMillionWriteUnits)}/M WU @ ${p.writeUnitBytes} B`);
 		if (p.perThousandRequests) bits.push(`${money(p.perThousandRequests)}/1K req`);
+		// Batching and the per-request floor only matter together, and when they
+		// do they move the per-GB column by more than any rate on the card — so
+		// print them next to it rather than leaving the number unexplained.
+		if (p.minBillableBytesPerRequest) {
+			bits.push(`min ${p.minBillableBytesPerRequest / 1024} KiB/req @ ${p.chunksPerRequest || 1}/req`);
+		} else if (p.chunksPerRequest) {
+			bits.push(`${p.chunksPerRequest} chunks/req`);
+		}
 		const isDefault = p.id === c.write.paths[0].id;
-		console.log(`      write     ${(p.label || p.id).padEnd(12)} ${bits.join(" + ").padEnd(30)} → ${money(perGB)}/GB${isDefault ? "  (default path)" : ""}`);
+		console.log(`      write     ${(p.label || p.id).padEnd(20)} ${bits.join(" + ").padEnd(46)} → ${money(perGB)}/GB${isDefault ? "  (default path)" : ""}`);
+	}
+	if (c.supports) {
+		for (const [kind, known] of Object.entries({ indexTypes: INDEX_TYPES, quantization: QUANT_IDS })) {
+			const list = c.supports[kind];
+			if (!list) continue;
+			console.log(`      no ${kind.padEnd(9)} ${known.filter((k) => !list.includes(k)).join(", ")}`);
+		}
 	}
 	console.log(`      minimum   ${c.minimumMonthly ? `${money(c.minimumMonthly)}/month` : "none"}`);
 	console.log(`      verified  ${c.verified}${stale > 180 ? `   ⚠ ${stale} days ago — worth re-checking` : ""}`);

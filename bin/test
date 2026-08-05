@@ -95,15 +95,44 @@ toggle("rescore", false);
 setSelect("quant", "f32");
 
 console.log("\nvendors · every control below is generated from the rate cards\n");
+// Parse the whole tag before looking for `disabled`, so the attribute order in
+// the template can change without quietly turning these assertions into no-ops.
+const tags = (id, tag, attr) =>
+	[...el(id).innerHTML.matchAll(new RegExp(`<${tag}[^>]*>`, "g"))].map(([t]) => ({
+		v: new RegExp(`${attr}="([^"]+)"`).exec(t)[1],
+		disabled: /\sdisabled[\s>=]/.test(t),
+	}));
+
 for (const id of Object.keys(VENDORS)) {
 	clickSeg("segVendor", id);
 	const card = VENDORS[id];
-	const buttons = [...el("segPath").innerHTML.matchAll(/data-v="([^"]+)"/g)].map((m) => m[1]);
-	ok(buttons.length === card.paths.length, `${card.name}: one button per write path`, `[${buttons.join(", ")}]`);
-	ok(!el("fPath").hidden === card.paths.length > 1, `${card.name}: path selector shown only when there is a choice`);
-	ok(buttons.includes(S.path), `${card.name}: the selected path is one this vendor offers`, S.path);
+	const buttons = tags("segPath", "button", "data-v");
+	ok(buttons.length === card.paths.length, `${card.name}: one button per write path`, `[${buttons.map((b) => b.v).join(", ")}]`);
+	// The field never leaves the row — a vendor with one way in shows it disabled
+	// rather than blank, which is what stopped the row from jumping on a switch.
+	ok(!el("fPath").hidden, `${card.name}: the write-path field stays on screen`);
+	ok(
+		buttons.every((b) => b.disabled === (card.paths.length === 1)),
+		`${card.name}: disabled exactly when there is nothing to choose`,
+		card.paths.length === 1 ? "single path, disabled" : "two paths, live",
+	);
+	ok(buttons.some((b) => b.v === S.path), `${card.name}: the selected path is one this vendor offers`, S.path);
+	ok(S.path === card.paths[0].id, `${card.name}: lands on the bulk path by default`, S.path);
 	ok(el("vendorHint").textContent === `billed in ${card.billingUnit}`, `${card.name}: billing unit hint`, el("vendorHint").textContent);
 	ok(isFinite(total()) && total() > 0, `${card.name}: prices to a real number`, usd(total()));
+}
+
+// The footer claims to list every pricing page these rates were read from. That
+// claim is only worth making if it cannot quietly go stale when a card lands.
+console.log("\nfooter sources\n");
+{
+	const listed = el("sourceList").innerHTML;
+	const urls = Object.values(VENDORS).flatMap((v) => v.sources.map((s) => s.url));
+	const missing = urls.filter((u) => !listed.includes(u));
+	ok(!missing.length, `every source URL on every card is linked (${urls.length})`, missing.join(", ") || "none missing");
+	const cards = Object.values(VENDORS).filter((v) => !listed.includes(`rates/${v.id}.json`));
+	ok(!cards.length, "every rate card is linked from the footer", cards.map((c) => c.id).join(", ") || "all present");
+	ok(Object.values(VENDORS).every((v) => listed.includes(v.verified)), "each block carries its verified date");
 }
 
 // A vendor with several paths must reprice when the path changes, and a path id
@@ -120,6 +149,92 @@ if (multi) {
 		clickSeg("segVendor", single.id);
 		ok(S.path === single.paths[0].id, "a stale path resets on a vendor that lacks it", `S.path=${S.path}`);
 	}
+}
+
+// A vendor that can't run an index shape or a precision must not be shown a
+// price for it — the control is struck through and the state is coerced.
+console.log("\nvendor capabilities\n");
+for (const v of Object.values(VENDORS).filter((v) => v.supports)) {
+	clickSeg("segVendor", v.id);
+	for (const [kind, ids] of [["indexTypes", ["sparse", "dense", "multi"]], ["quantization", ["f32", "int8", "binary"]]]) {
+		const allowed = v.supports[kind];
+		if (!allowed) continue;
+		const rendered = kind === "indexTypes"
+			? tags("segIndex", "button", "data-v")
+			: tags("quant", "option", "value");
+		ok(rendered.length === ids.length, `${v.name}: every ${kind} option still rendered`, `[${rendered.map((r) => r.v).join(", ")}]`);
+		ok(
+			rendered.every((r) => r.disabled === !allowed.includes(r.v)),
+			`${v.name}: exactly the unsupported ${kind} are disabled`,
+			`[${rendered.filter((r) => r.disabled).map((r) => r.v).join(", ") || "none"}]`,
+		);
+	}
+	ok(allowedNow(v, "indexTypes", S.indexType), `${v.name}: lands on an index shape it can run`, S.indexType);
+	ok(allowedNow(v, "quantization", S.quant), `${v.name}: lands on a precision it can store`, S.quant);
+	ok((el("supportHint").textContent || "").length > 20, `${v.name}: says why, under the controls it disables`);
+}
+function allowedNow(v, kind, id) {
+	return !v.supports?.[kind] || v.supports[kind].includes(id);
+}
+
+// The coercion, not the disabled attribute, is what keeps the model honest: pick
+// sparse somewhere it exists, then switch to a vendor where it doesn't.
+const restricted = Object.values(VENDORS).find((v) => v.supports?.indexTypes && !v.supports.indexTypes.includes("sparse"));
+const open = Object.values(VENDORS).find((v) => !v.supports?.indexTypes);
+if (restricted && open) {
+	clickSeg("segVendor", open.id);
+	clickSeg("segIndex", "sparse");
+	ok(S.indexType === "sparse", `sparse selects on ${open.name}`);
+	clickSeg("segVendor", restricted.id);
+	ok(S.indexType !== "sparse", `switching to ${restricted.name} drops a shape it cannot run`, `now ${S.indexType}`);
+	// The ladder still shows the row — with no price on it.
+	ok(
+		/not offered by/.test(el("ladder").innerHTML),
+		`${restricted.name}: the ladder keeps the row and drops the number`,
+	);
+}
+
+// The per-request floor is the only rate component that is not linear in bytes,
+// so it is the only one that can be wrong in a direction the per-GB column in
+// bin/check won't show. Drive it through the real controls, but read the write
+// column rather than the total: storage and embedding are identical on both
+// paths, and averaging them in was hiding most of the effect being measured.
+const floored = Object.values(VENDORS).find((v) => v.paths.some((p) => p.minBillableBytesPerRequest));
+if (floored) {
+	console.log("\nper-request minimum billable size\n");
+	const [big, small] = [...floored.paths].sort(
+		(a, b) => (b.chunksPerRequest || 1) - (a.chunksPerRequest || 1),
+	);
+	clickSeg("segVendor", floored.id);
+	clickSeg("segIndex", "dense");
+	setSelect("dims", 1536);
+
+	// Month 1 carries no re-index, so its write column is one clean pass.
+	const priceAt = (path) => {
+		clickSeg("segPath", path.id);
+		return timeline()[0].write;
+	};
+	const batched = priceAt(big);
+	const perVector = priceAt(small);
+	ok(perVector > batched, `${floored.name}: the floor bites when the batch shrinks`, `${usd(batched)} → ${usd(perVector)}`);
+
+	// A batch big enough to clear the floor has to price as if the floor were
+	// absent — otherwise it is being applied as a fee rather than a minimum.
+	const perChunk = profile(S.datasetGB * GB).per;
+	ok(
+		perChunk * big.chunksPerRequest > big.minBillableBytesPerRequest,
+		`${floored.name}: the default batch clears the floor at the default index`,
+		`${Math.round((perChunk * big.chunksPerRequest) / 1024)} KiB/req vs ${big.minBillableBytesPerRequest / 1024} KiB`,
+	);
+
+	// Widening the vector has to shrink the penalty, because the floor is a
+	// max() against real bytes and not a multiplier on them. A bug that applied
+	// it as a multiplier would hold this ratio flat.
+	const narrow = perVector / batched;
+	setSelect("dims", 3072);
+	const wide = priceAt(small) / priceAt(big);
+	ok(wide < narrow, `${floored.name}: the penalty shrinks as vectors outgrow the floor`, `${narrow.toFixed(2)}× at 1536-d → ${wide.toFixed(2)}× at 3072-d`);
+	setSelect("dims", 1536);
 }
 
 console.log(fails ? `\n  ${fails} check(s) FAILED\n` : "\n  all checks pass\n");

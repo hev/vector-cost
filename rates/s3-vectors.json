@@ -1,0 +1,55 @@
+{
+	"id": "s3-vectors",
+	"name": "S3 Vectors",
+	"homepage": "https://aws.amazon.com/s3/features/vectors/",
+	"billingUnit": "GB",
+	"storage": {
+		"perUnitMonth": 0.06
+	},
+	"write": {
+		"paths": [
+			{
+				"id": "batch",
+				"label": "batched PutVectors",
+				"perUnit": 0.2,
+				"chunksPerRequest": 500,
+				"minBillableBytesPerRequest": 131072
+			},
+			{
+				"id": "single",
+				"label": "one vector per PUT",
+				"perUnit": 0.2,
+				"chunksPerRequest": 1,
+				"minBillableBytesPerRequest": 131072
+			}
+		]
+	},
+	"minimumMonthly": 0,
+	"supports": {
+		"indexTypes": ["dense", "multi"],
+		"quantization": ["f32"],
+		"note": "S3 Vectors is a pure vector store — no BM25 or inverted index — and stores float32 only."
+	},
+	"note": "Amazon S3 Vectors (us-east-1): $0.06/GB-month stored · PUT $0.20/GB uploaded, subject to a minimum charge of 128 KB per PUT request · no platform minimum. That minimum is the whole story, and it is why this card carries two write paths. PutVectors takes up to 500 vectors per call, so a batched load clears the floor and pays the $0.20/GB list rate, while one-vector-per-request PUTs bill 128 KB for a 6 KB vector — same corpus, ~21x the write bill, on a rate card that never changed. Billable size is the vector data plus its metadata and key. There is no BM25 here and no stored precision below float32, so sparse and quantization are closed off above rather than priced as a product AWS does not sell. Queries bill separately ($2.50/M requests, plus data processed and data returned) and are not modelled here.",
+	"verified": "2026-08-05",
+	"sources": [
+		{
+			"label": "Amazon S3 pricing — S3 Vectors",
+			"url": "https://aws.amazon.com/s3/pricing/",
+			"retrieved": "2026-08-05",
+			"note": "Storage $0.06/GB-month and PUT $0.20/GB, both us-east-1. The floor is stated as \"PUT is subject to a minimum charge of 128KB per PUT\" — the field this card calls minBillableBytesPerRequest, and the reason this card describes two paths rather than one rate. Storage carries no equivalent per-vector minimum; it bills the logical vector size, which AWS defines as the vector data (4 bytes per dimension) plus metadata plus the key (1 byte per character)."
+		},
+		{
+			"label": "S3 Vectors limitations and restrictions",
+			"url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-limitations.html",
+			"retrieved": "2026-08-05",
+			"note": "Source of chunksPerRequest: \"Vectors per PutVectors API call: Up to 500\", within a \"Request payload size: Up to 20 MiB\" cap. At the calculator's 1536-d f32 default a full 500-vector batch is ~3.1 MB, so 500 is reachable; it stays under the cap through the maximum 4,096 dimensions."
+		},
+		{
+			"label": "Inserting vectors into a vector index",
+			"url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-vectors-index-create.html",
+			"retrieved": "2026-08-05",
+			"note": "AWS names the cost effect directly: \"To maximize write throughput and optimize for costs, it's recommended that you insert vectors in large batches, up to the maximum batch size for PutVectors.\" Also the source for float32-only storage — higher-precision values are converted to float32 before they are stored."
+		}
+	]
+}

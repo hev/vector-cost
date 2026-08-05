@@ -1,0 +1,35 @@
+{
+	"id": "chroma",
+	"name": "Chroma",
+	"homepage": "https://www.trychroma.com",
+	"billingUnit": "GiB",
+	"storage": {
+		"perUnitMonth": 0.33
+	},
+	"write": {
+		"paths": [
+			{
+				"id": "write",
+				"label": "write",
+				"perUnit": 2.5
+			}
+		]
+	},
+	"minimumMonthly": 0,
+	"note": "Chroma Cloud: $0.33/GiB-month stored · $2.50/GiB written via add, update or upsert · no minimum on the usage-based Starter plan. Billed in GiB, not GB. Reads are priced separately at $0.0075/TiB queried plus $0.09/GiB returned, which this calculator does not model.",
+	"verified": "2026-08-05",
+	"sources": [
+		{
+			"label": "Chroma Cloud pricing (docs)",
+			"url": "https://docs.trychroma.com/cloud/pricing",
+			"retrieved": "2026-08-05",
+			"note": "Storage is prorated hourly and writes are metered per \"logical GiB\" — Chroma's term for the size of the data as written, not the size on disk after indexing."
+		},
+		{
+			"label": "Chroma pricing page",
+			"url": "https://www.trychroma.com/pricing",
+			"retrieved": "2026-08-05",
+			"note": "Same rates as the docs. Adds the plan structure: Starter is $0/month usage-based, Team is $250/month including $100 of usage."
+		}
+	]
+}

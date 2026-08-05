@@ -1,0 +1,35 @@
+{
+	"id": "upstash",
+	"name": "Upstash",
+	"homepage": "https://upstash.com",
+	"billingUnit": "GB",
+	"storage": {
+		"perUnitMonth": 0.25
+	},
+	"write": {
+		"paths": [
+			{
+				"id": "upsert",
+				"label": "upsert",
+				"perThousandRequests": 0.004
+			}
+		]
+	},
+	"minimumMonthly": 0,
+	"note": "Upstash Vector, Pay as You Go: $0.25/GB-month stored, billed on the daily average of your data size · $0.40 per 100K requests, with upserts and queries priced identically · no minimum. There is no per-byte write charge at all — writes bill purely by request count, so the write bill tracks how many chunks you have, not how big the vectors are. A Fixed plan at $60/month exists with capacity limits rather than usage billing.",
+	"verified": "2026-08-05",
+	"sources": [
+		{
+			"label": "Upstash Vector pricing",
+			"url": "https://upstash.com/pricing/vector",
+			"retrieved": "2026-08-05",
+			"note": "Storage: \"we take daily average of your data size and multiply with $0.25 at the end of the month.\" Requests: \"$0.4 per 100K requests.\""
+		},
+		{
+			"label": "Upstash Vector FAQ",
+			"url": "https://upstash.com/docs/vector/help/faq",
+			"retrieved": "2026-08-05",
+			"note": "Why a request fee is the right field here: \"If upsert and delete operations involve multiple vectors at a time, the billable request count will be equal to number of vectors upserted or deleted at one request.\" Batching the API call does not reduce the bill, so one chunk really is one billable request."
+		}
+	]
+}

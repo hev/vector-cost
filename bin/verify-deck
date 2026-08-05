@@ -60,7 +60,7 @@ function near(got, want, tol, label) {
 function reset() {
 	Object.assign(S, {
 		datasetGB: 1, indexType: "dense", dims: 1536, mvDims: 128, quant: "f32", rescore: false,
-		vendor: "turbopuffer", path: "upsert", reindexes: 10, embedRate: 0.02,
+		vendor: "turbopuffer", reindexes: 10, embedRate: 0.02,
 		chunkKB: 1, hnswM: 16, sparseRatio: 0.3, growth: 0, keepPayload: false,
 	});
 }
@@ -71,15 +71,34 @@ const perGB = (type, dims) => {
 };
 
 // ---- what the slides claim ------------------------------------------------
-const barGB = [...md.matchAll(/<span class="bar-val" style="text-align:right">([\d.]+) GB<\/span>/g)].map((m) =>
-	parseFloat(m[1]),
+// Scope the bar parse to one slide. The deck has a second bar chart further on
+// (the quantization slide) whose rows match the same markup, and matching the
+// whole file found 8 bars, failed the length check, and skipped the entire run
+// silently — which is worse than no checker, because it looks like a pass. The
+// ladder is the slide with a `sparse` row; nothing else in the deck has one.
+const SLIDES = md.split(/^---$/m);
+const ladder = SLIDES.find((s) => /bar-label">sparse/.test(s));
+const tiles = SLIDES.find((s) => s.includes("stat-num"));
+
+const barGB = [...(ladder || "").matchAll(/<span class="bar-val" style="text-align:right">([\d.]+) GB<\/span>/g)].map(
+	(m) => parseFloat(m[1]),
 );
-const widths = [...md.matchAll(/bar-fill" style="width:([\d.]+)%/g)].map((m) => parseFloat(m[1]));
-const stats = [...md.matchAll(/<span class="stat-num">\$([\d.]+)(K?)<\/span>/g)].map(
+const widths = [...(ladder || "").matchAll(/bar-fill" style="width:([\d.]+)%/g)].map((m) => parseFloat(m[1]));
+const stats = [...(tiles || "").matchAll(/<span class="stat-num">\$([\d.]+)(K?)<\/span>/g)].map(
 	(m) => parseFloat(m[1]) * (m[2] === "K" ? 1000 : 1),
 );
+if (!ladder || !tiles) {
+	skip(`${slides} is not the vector-cost deck (no ladder slide / stat tiles) — skipped`);
+}
+// Past this point the deck IS the vector-cost deck, so a shape that doesn't
+// parse is a failure rather than a skip. Skipping here is how the ladder went
+// unchecked; a deck that has the slide but not the expected rows is a deck
+// someone edited, which is exactly when this needs to speak up.
 if (barGB.length !== 4 || widths.length !== 4 || stats.length !== 3) {
-	skip(`${slides} is not the vector-cost deck (no ladder bars / stat tiles) — skipped`);
+	die(
+		`recognized the deck but not its shape — ladder has ${barGB.length} bars and ${widths.length} fills ` +
+			`(expected 4 and 4), stat tiles ${stats.length} (expected 3). Update this parser or the slide.`,
+	);
 }
 
 console.log(`\n${slides.replace(`${join(ROOT, "..")}/`, "")} — slides vs dist/index.html\n`);
@@ -113,13 +132,24 @@ const avg = md.match(
 );
 if (!avg) die("could not find the sentence stating the deck's average vendor storage cost");
 const quotedAvg = parseFloat(avg[1]);
-const quoted = new Map(
-	[...avg[2].matchAll(/([A-Za-z][\w-]*)\s+\$(\d+(?:\.\d+)?)/g)].map((m) => [m[1].toLowerCase(), parseFloat(m[2])]),
-);
 
-near(quoted.size, RATES.length, 0, `the slide names ${quoted.size} vendors, the calculator ships ${RATES.length}`);
+// Look each card's own name up in the sentence rather than tokenizing the
+// sentence and hoping the tokens come back as vendor names. A name is whatever
+// rates/<id>.json says it is, and "S3 Vectors" is two words — a generic
+// "\w+ $\d" scan captures "Vectors", which matches no card and can never be
+// satisfied by any wording of the slide.
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const rateOf = (name) => {
+	const m = avg[2].match(new RegExp(`${escapeRe(name)}\\s+\\$(\\d+(?:\\.\\d+)?)`, "i"));
+	return m ? parseFloat(m[1]) : undefined;
+};
+
+// Count the prices the sentence states, not the names matched, so a vendor on
+// the slide that has no rate card here still trips the count.
+const stated = [...avg[2].matchAll(/\$\d+(?:\.\d+)?/g)].length;
+near(stated, RATES.length, 0, `the slide names ${stated} vendors, the calculator ships ${RATES.length}`);
 for (const card of RATES) {
-	const got = quoted.get(card.name.toLowerCase());
+	const got = rateOf(card.name);
 	if (got === undefined) {
 		fails++;
 		console.log(`  FAIL  ${`slide names a rate for ${card.name}`.padEnd(42)} absent from that sentence`);

@@ -43,8 +43,8 @@ accident will price incorrectly the first time anything changes.
 Issues about the *model* — write amplification factors, HNSW overhead, chunking
 assumptions, the re-index schedule — are very welcome, especially with a
 measurement behind them. The defaults are honest estimates, not measurements,
-and they're documented in the assumptions panel precisely so they can be argued
-with.
+and the README documents [every one of
+them](README.md#every-number-this-uses) precisely so they can be argued with.
 
 The one thing that is out of scope by design is **query cost**. See the README.
 

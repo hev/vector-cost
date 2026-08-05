@@ -1,0 +1,36 @@
+{
+	"id": "zilliz",
+	"name": "Zilliz",
+	"homepage": "https://zilliz.com",
+	"billingUnit": "GB",
+	"storage": {
+		"perUnitMonth": 0.3
+	},
+	"write": {
+		"paths": [
+			{
+				"id": "insert",
+				"label": "insert",
+				"writeUnitBytes": 4096,
+				"perMillionWriteUnits": 4.0
+			}
+		]
+	},
+	"minimumMonthly": 0,
+	"note": "Zilliz Cloud Serverless: $0.30/GB-month stored · inserts metered in vCUs at 1 KB per 0.25 vCU, $4.00/M vCU ≈ $0.98/GB · no minimum. Serverless is a different product from Zilliz Dedicated, which bills CU-hours for compute and $0.025/GB-month for storage — the widely reported \"87% storage price cut to $0.04\" was Dedicated, not this tier.",
+	"verified": "2026-08-05",
+	"sources": [
+		{
+			"label": "Zilliz Cloud pricing",
+			"url": "https://zilliz.com/pricing",
+			"retrieved": "2026-08-05",
+			"note": "The rates are not page text — the page ships a pricingData blob whose serverlessPricingMap reads {vCu: 4, storage: 0.3} for both available Serverless regions (aws eu-central-1, gcp us-west1). The dedicatedPricingMap in the same blob is where $0.025/GB-month storage and $0.175+/CU-hour live."
+		},
+		{
+			"label": "Serverless cluster cost (docs)",
+			"url": "https://docs.zilliz.com/docs/serverless-cluster-cost",
+			"retrieved": "2026-08-05",
+			"note": "Source of the write model: \"1 KB of inserted data = 0.25 vCU\" at \"$4 per million vCUs\", hence 4 KB per vCU. The docs do not define whether KB is 1000 or 1024 bytes; this card assumes 1024, which prices writes 2.4% higher than the 1000-byte reading. Deletes also bill (1 vCU per entity) and reads bill a 6 vCU minimum — neither is modelled here."
+		}
+	]
+}

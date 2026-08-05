@@ -7,30 +7,29 @@
 		"perUnitMonth": 0.33
 	},
 	"write": {
-		"label": "Pinecone write path",
 		"paths": [
+			{
+				"id": "import",
+				"label": "bulk import",
+				"perUnit": 0.25
+			},
 			{
 				"id": "upsert",
 				"label": "upsert",
 				"writeUnitBytes": 1024,
 				"perMillionWriteUnits": 4.0
-			},
-			{
-				"id": "import",
-				"label": "bulk import",
-				"perUnit": 0.25
 			}
 		]
 	},
 	"minimumMonthly": 50,
-	"note": "$0.33/GB-month stored · upsert billed in Write Units at 1 WU per 1 KB, $4.00/M (Standard) ≈ $3.91/GB · bulk Import $0.25/GB · $50/mo minimum.",
+	"note": "$0.33/GB-month stored · bulk Import $0.25/GB · upsert billed in Write Units at 1 WU per 1 KB, $4.00/M (Standard) ≈ $3.91/GB · $50/mo minimum. Import is the default path here because it is how a corpus this size actually lands: it reads Parquet out of your own object storage and costs roughly 16x less than upserting the same bytes. It is not an incremental path — an import writes into a new namespace — so live updates and small deltas really do pay the upsert rate, which is what the other button prices.",
 	"verified": "2026-08-05",
 	"sources": [
 		{
 			"label": "Pinecone pricing",
 			"url": "https://www.pinecone.io/pricing/",
 			"retrieved": "2026-08-05",
-			"note": "Upsert is metered in Write Units (1 WU per 1 KB, 1 KB = 1024 B), which is why this card carries writeUnitBytes rather than a flat per-GB rate."
+			"note": "Upsert is metered in Write Units (1 WU per 1 KB, 1 KB = 1024 B), which is why this card carries writeUnitBytes rather than a flat per-GB rate. The page quotes Write Units as \"$4–$4.50 per million\" depending on cloud and region; this card takes the $4.00 floor, so it understates upserts outside the cheapest regions. Import is listed flat at $0.25/GB with no per-request or minimum charge attached."
 		}
 	]
 }

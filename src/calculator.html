@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vector index cost calculator — 36 months</title>
+<title>Vector index cost calculator — the full three years</title>
 <style>
   :root {
     color-scheme: light;
@@ -75,7 +75,16 @@
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
-  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 72px; }
+  /* Type below is sized in cqw, not vw. The viewport keeps growing on a wide
+     monitor but this box stops at 1180px, so vw-based headings were scaling
+     against a width they don't actually live in — which is how the h1 ended up
+     one character too long for its own container. */
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 24px 72px;
+    container-type: inline-size;
+  }
 
   .page-head {
     display: flex;
@@ -95,7 +104,11 @@
   }
   h1 {
     font-family: var(--mono);
-    font-size: clamp(1.6rem, 3.6vw, 2.4rem);
+    /* 3.2cqw keeps the 51-character headline on one line at any container width:
+       monospace advance is 0.6em, so 51 chars need ~30x the font size, and
+       100/30.6 = 3.27cqw is the ceiling. Because it is a ratio of the container,
+       it holds at every width instead of only at the cap. */
+    font-size: clamp(1.6rem, 3.2cqw, 2.4rem);
     line-height: 1.15;
     color: var(--ink);
     margin: 0 0 12px;
@@ -103,10 +116,25 @@
     letter-spacing: -0.01em;
     text-wrap: balance;
   }
-  .lede { color: var(--muted); max-width: 62ch; margin: 0 0 28px; text-wrap: pretty; }
+  /* Was capped at 62ch — a measure in character widths, which ignores the
+     container entirely and left the paragraph stopping ~570px short of a
+     full-width heading above it and a full-width card below. Same fault as the
+     h1: an absolute unit standing in for the box the text actually lives in. */
+  .lede { color: var(--muted); max-width: 100cqw; margin: 0 0 18px; text-wrap: pretty; }
+  .basis {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    background: var(--paper-warm);
+    border-left: 3px solid var(--signal);
+    border-radius: 0 6px 6px 0;
+    padding: 12px 16px;
+    margin: 0 0 28px;
+    text-wrap: pretty;
+  }
+  .basis b { color: var(--ink); }
   /* Keeps a single word from stranding on its own last line across the copy
      that actually flows — subtitles, hints, and the assumptions panel. */
-  .card-sub, .hero-sub, .kpi .k-sub, .hint, .assume li, .foot-line { text-wrap: pretty; }
+  .card-sub, .hero-sub, .kpi .k-sub, .hint, .rx-note, .cta-card p, .foot-line { text-wrap: pretty; }
   h2 {
     font-family: var(--mono);
     font-size: 0.78rem;
@@ -126,7 +154,9 @@
     margin-bottom: 26px;
   }
   .row { display: flex; flex-wrap: wrap; gap: 22px 30px; align-items: flex-start; }
+  .row + .row { margin-top: 22px; }
   .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+  .field.grow { flex: 1 1 100%; }
   .field > label, .field > .lbl {
     font-size: 0.76rem;
     font-weight: 600;
@@ -147,7 +177,16 @@
     outline: 2px solid var(--signal);
     outline-offset: 2px;
   }
-  .seg { display: inline-flex; border: 1px solid var(--hairline); border-radius: 6px; overflow: hidden; }
+  /* align-self matters: .field is a column flex, so a stretched .seg grows to
+     whatever the widest thing in the field is — usually a hint sentence — and
+     paints empty box past the last button. Size it to its buttons instead. */
+  .seg {
+    display: inline-flex;
+    align-self: flex-start;
+    border: 1px solid var(--hairline);
+    border-radius: 6px;
+    overflow: hidden;
+  }
   .seg button {
     font-family: var(--body);
     font-size: 0.86rem;
@@ -161,9 +200,40 @@
   }
   .seg button:last-child { border-right: 0; }
   .seg button[aria-pressed="true"] { background: var(--signal); color: #fff; font-weight: 600; }
+  /* A joined pill works for three fixed options; the vendor list grows every
+     time someone lands a rate card, and a joined pill that wraps loses the
+     border on every row but the last. Chips wrap cleanly at any count. */
+  .seg.chips { border: 0; overflow: visible; flex-wrap: wrap; gap: 6px; }
+  .seg.chips button { border: 1px solid var(--hairline); border-radius: 6px; }
+  /* Struck through = this vendor does not sell it. */
+  .seg button:disabled {
+    background: var(--paper-warm);
+    color: var(--deemph);
+    cursor: not-allowed;
+    text-decoration: line-through;
+  }
+  /* Selected *and* disabled is a different statement — it is the path in force,
+     there just isn't a second one to pick. Reads as active, not unavailable. */
+  .seg button[aria-pressed="true"]:disabled {
+    background: var(--signal);
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: default;
+  }
   .inline { display: flex; align-items: center; gap: 8px; }
   .chk { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--ink-soft); cursor: pointer; }
-  .hint { font-size: 0.76rem; color: var(--muted); }
+  /* Capped so a long hint wraps inside its own column instead of widening the
+     field and pushing every control after it sideways. */
+  .hint { font-size: 0.76rem; color: var(--muted); max-width: 40ch; }
+  .limit {
+    font-size: 0.78rem;
+    color: var(--ink-soft);
+    margin: 3px 0 0;
+    padding-left: 11px;
+    border-left: 2px solid var(--signal);
+    max-width: 80ch;
+  }
   .sep { height: 1px; background: var(--hairline); margin: 20px 0; border: 0; }
 
   details.adv summary {
@@ -214,6 +284,35 @@
   .kpi .k-val { font-size: 1.85rem; font-weight: 700; color: var(--ink); line-height: 1.1; letter-spacing: -0.01em; }
   .kpi .k-sub { font-size: 0.78rem; color: var(--muted); margin-top: 5px; }
 
+  /* ---------- re-index band ----------
+     The argument of the whole page is that the recurring pass is the bill and
+     the steady state is the rounding error, so it gets its own band above the
+     component tiles rather than competing as a fifth equal one. Writes and
+     embedding are shown together because that is the unit you actually pay:
+     nobody re-writes an index without re-embedding for it. */
+  .rx-card {
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--s-write);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 20px 34px;
+  }
+  .rx-label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
+  .rx-label .glyph { color: var(--s-write); font-weight: 700; }
+  .rx-num { font-size: 2.1rem; font-weight: 700; color: var(--ink); line-height: 1.1; letter-spacing: -0.02em; margin: 5px 0 10px; }
+  .rx-num.sub { font-size: 1.85rem; }
+  .rx-split { display: flex; height: 7px; border-radius: 4px; overflow: hidden; background: var(--paper-warm); margin-bottom: 9px; }
+  .rx-split span { display: block; height: 100%; }
+  .rx-parts { display: flex; flex-wrap: wrap; gap: 5px 15px; font-size: 0.78rem; color: var(--muted); }
+  .rx-parts .p { display: flex; align-items: center; gap: 6px; }
+  .rx-parts b { color: var(--ink-soft); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .rx-note { font-size: 0.78rem; color: var(--muted); margin-top: 9px; }
+  .rx-note b { color: var(--ink-soft); }
+
   /* ---------- chart ---------- */
   .card {
     background: var(--surface);
@@ -224,7 +323,7 @@
   }
   .card-head { display: flex; flex-wrap: wrap; gap: 12px; align-items: baseline; justify-content: space-between; margin-bottom: 4px; }
   .card-title { font-family: var(--mono); font-size: 0.95rem; font-weight: 700; color: var(--ink); }
-  .card-sub { font-size: 0.82rem; color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+  .card-sub { font-size: 0.82rem; color: var(--muted); margin: 0 0 16px; max-width: 100cqw; }
   .btn {
     font-family: var(--body); font-size: 0.8rem;
     background: var(--paper); color: var(--muted);
@@ -268,6 +367,7 @@
   .lrow .l-name { font-size: 0.84rem; color: var(--ink-soft); }
   .lrow .l-name b { display: block; color: var(--ink); font-weight: 600; }
   .lrow .l-name span { display: block; font-size: 0.76rem; color: var(--muted); line-height: 1.35; overflow-wrap: anywhere; }
+  .lrow.off .l-name b, .lrow.off .l-val { color: var(--deemph); }
   .l-track { display: block; background: var(--paper-warm); border-radius: 4px; height: 22px; position: relative; overflow: hidden; }
   .l-fill { display: block; height: 100%; min-width: 3px; border-radius: 0 4px 4px 0; background: var(--deemph); }
   .lrow.on .l-fill { background: var(--signal); }
@@ -288,18 +388,40 @@
   tbody td { color: var(--ink-soft); }
   tr.is-rx td:first-child { color: var(--signal); font-weight: 700; }
 
-  /* ---------- assumptions ---------- */
-  .assume { font-size: 0.84rem; color: var(--muted); }
-  .assume ul { margin: 0 0 14px; padding-left: 20px; }
-  .assume li { margin-bottom: 6px; }
-  .assume b, .assume strong { color: var(--ink-soft); }
-  .assume code { font-family: var(--mono); font-size: 0.86em; background: var(--paper-warm); padding: 1px 5px; border-radius: 3px; color: var(--ink-soft); }
-  .assume h3 { font-family: var(--mono); font-size: 0.8rem; color: var(--ink); margin: 18px 0 8px; letter-spacing: 0.02em; }
+  /* ---------- CTA ---------- */
+  .cta-card { border-top: 3px solid var(--signal); }
+  .cta-card h2 {
+    font-family: var(--mono); font-size: 1.02rem; font-weight: 700;
+    color: var(--ink); letter-spacing: -0.01em; margin: 2px 0 10px;
+  }
+  .cta-card p { margin: 0 0 8px; font-size: 0.88rem; color: var(--ink-soft); }
+  .cta {
+    display: inline-block; margin-top: 10px;
+    font-family: var(--mono); font-size: 0.85rem; font-weight: 600;
+    background: var(--signal); color: #fff; text-decoration: none;
+    border-radius: 6px; padding: 10px 16px;
+  }
+  .cta:hover { filter: brightness(1.08); }
+  .cta:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
   footer { margin-top: 34px; padding-top: 18px; border-top: 1px solid var(--hairline); font-size: 0.8rem; color: var(--muted); }
   footer a { color: var(--signal); }
-  .foot-line { margin: 0 0 8px; max-width: 78ch; }
+  .foot-line { margin: 0 0 8px; max-width: 100cqw; }
   .foot-line b { color: var(--ink-soft); }
-  .foot-links { display: flex; align-items: center; gap: 9px; margin: 14px 0 0; flex-wrap: wrap; }
+  .foot-head {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    margin: 20px 0 10px;
+  }
+  .sources { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 10px 26px; }
+  .src b { color: var(--ink-soft); font-weight: 600; }
+  .src .stale { color: var(--signal); }
+  .src ul { list-style: none; margin: 2px 0 0; padding: 0; }
+  .src li { margin: 1px 0; }
+  .src li::before { content: "↳ "; color: var(--axis); }
+  .foot-links { display: flex; align-items: center; gap: 9px; margin: 20px 0 0; flex-wrap: wrap; }
   .foot-links .dot { color: var(--axis); }
   a.gh {
     display: inline-flex; align-items: center; gap: 7px;
@@ -332,6 +454,12 @@
     Vendor calculators quote you a month you will never have. Start from the one number you
     walked in with — how much data you actually have — and let write amplification do the rest.
   </p>
+  <p class="basis">
+    <b>These are serverless, usage-based rates</b> — the per-GB tiers a vendor publishes and
+    bills you at without a conversation. Most of them will also sell you provisioned capacity,
+    and that is usually the cheaper side of the deal for re-indexing, which is where this model
+    spends most of its money. Read every figure here as the list price you negotiate down from.
+  </p>
 
   <!-- =============== CONTROLS =============== -->
   <div class="controls">
@@ -349,13 +477,14 @@
         <span class="hint" id="chunkHint"></span>
       </div>
 
+      <!-- Generated, not static, because which shapes a vendor can actually run
+           is a property of its rate card. Unsupported ones are disabled in
+           place rather than removed: a shape that vanishes when you switch
+           vendors reads as a rendering bug, and it moves every control to its
+           right. -->
       <div class="field">
         <span class="lbl">Index type</span>
-        <div class="seg" id="segIndex" role="group" aria-label="Index type">
-          <button data-v="sparse" aria-pressed="false">sparse / BM25</button>
-          <button data-v="dense" aria-pressed="true">dense</button>
-          <button data-v="multi" aria-pressed="false">multi-vector</button>
-        </div>
+        <div class="seg" id="segIndex" role="group" aria-label="Index type"></div>
       </div>
 
       <div class="field" id="fDims">
@@ -380,11 +509,7 @@
 
       <div class="field" id="fQuant">
         <label for="quant">Quantization</label>
-        <select id="quant">
-          <option value="f32" selected>none — float32</option>
-          <option value="int8">int8 — 4× cut</option>
-          <option value="binary">binary — 32× cut</option>
-        </select>
+        <select id="quant"></select>
         <label class="chk" id="rescoreWrap" hidden>
           <input type="checkbox" id="rescore"> keep full-precision copy for rescoring
         </label>
@@ -393,22 +518,26 @@
 
     <hr class="sep">
 
+    <!-- The vendor list gets a row to itself. It is the one control that grows
+         every time someone lands a rate card, and sharing a line with anything
+         means each new vendor re-flows whatever sits beside it. -->
     <div class="row">
-      <div class="field">
+      <div class="field grow">
         <span class="lbl">Vendor</span>
-        <div class="seg" id="segVendor" role="group" aria-label="Vendor">
+        <div class="seg chips" id="segVendor" role="group" aria-label="Vendor">
           <!-- @@VENDOR_BUTTONS@@ -->
         </div>
         <span class="hint" id="vendorHint"></span>
+        <!-- Why something above is struck through. It lives here, on the only
+             full-width row, because it is a sentence: in a narrow column it
+             stretched the field and shoved the controls beside it out of line. -->
+        <p class="limit" id="supportHint" hidden></p>
       </div>
+    </div>
 
-      <div class="field" id="fPath">
-        <span class="lbl" id="pathLabel">Write path</span>
-        <div class="seg" id="segPath" role="group" aria-label="Write path"></div>
-      </div>
-
+    <div class="row">
       <div class="field">
-        <label for="reindexes">Re-indexes in 36 months</label>
+        <label for="reindexes">Re-indexes over 3 years</label>
         <input type="number" id="reindexes" value="10" min="0" max="35" step="1" style="width:100px">
         <span class="hint" id="rxHint"></span>
       </div>
@@ -424,6 +553,17 @@
           <input type="number" id="customRate" value="0.02" min="0" step="0.001" style="width:96px">
           <span class="hint">$ per M tokens</span>
         </div>
+      </div>
+
+      <!-- Last in the row on purpose. This is the only control whose width is set
+           by a different control — one vendor sells two ways in, the next sells
+           one — so it goes where a width change has nothing to its right to
+           shove. It is always rendered for the same reason: a field that comes
+           and goes as you click vendors is the jump, not the fix. -->
+      <div class="field" id="fPath">
+        <span class="lbl">Write path</span>
+        <div class="seg" id="segPath" role="group" aria-label="Write path"></div>
+        <span class="hint" id="pathHint"></span>
       </div>
     </div>
 
@@ -461,9 +601,26 @@
 
   <!-- =============== OUTPUTS =============== -->
   <div class="hero">
-    <div class="hero-label">36-month total — <span id="heroConfig"></span></div>
+    <div class="hero-label">Three-year total — <span id="heroConfig"></span></div>
     <div class="hero-num" id="heroTotal">—</div>
     <div class="hero-sub" id="heroSub"></div>
+  </div>
+
+  <div class="rx-card">
+    <div>
+      <div class="rx-label"><span class="glyph">↻</span> Cost of one re-index — writes + embedding</div>
+      <div class="rx-num" id="rxOnce">—</div>
+      <div class="rx-split" id="rxSplit"></div>
+      <div class="rx-parts">
+        <span class="p"><span class="swatch" style="background:var(--s-write)"></span>writes <b id="rxWrite">—</b></span>
+        <span class="p"><span class="swatch" style="background:var(--s-embed)"></span>embedding <b id="rxEmbed">—</b></span>
+      </div>
+    </div>
+    <div>
+      <div class="rx-label" id="rxCadence"></div>
+      <div class="rx-num sub" id="rxTotal">—</div>
+      <p class="rx-note" id="rxNote"></p>
+    </div>
   </div>
 
   <div class="kpis">
@@ -506,7 +663,7 @@
 
     <div class="plot-wrap" id="plotWrap">
       <svg class="chart" id="chart" viewBox="0 0 900 380" preserveAspectRatio="xMidYMid meet" role="img"
-           aria-label="Stacked area chart of cumulative storage, write and embedding cost over 36 months"></svg>
+           aria-label="Stacked area chart of cumulative storage, write and embedding cost across the full three years"></svg>
       <div class="tip" id="tip" role="status" aria-live="polite"></div>
     </div>
 
@@ -532,30 +689,53 @@
   <!-- =============== LADDER =============== -->
   <div class="card">
     <div class="card-head"><span class="card-title">Same corpus, four index shapes</span></div>
-    <p class="card-sub">36-month total at the current vendor, re-index cadence, quantization and embedding model.
+    <p class="card-sub">Whole-lifespan cost at the current vendor, re-index cadence, quantization and embedding model.
       The only thing that changes between rows is the index shape — which is the whole point.</p>
     <div class="ladder" id="ladder"></div>
   </div>
 
-  <!-- =============== ASSUMPTIONS =============== -->
-  <div class="card assume">
-    <div class="card-head"><span class="card-title">Every number this uses</span></div>
-    <p class="card-sub">No hidden constants. If you disagree with one, change it above or adjust for it — the ratios move together.</p>
-    <div id="assumeBody"></div>
+  <!-- =============== CTA =============== -->
+  <div class="card cta-card">
+    <div class="card-head"><span class="card-title">Next</span></div>
+    <h2>This is a model. The measurement takes about a week.</h2>
+    <p>
+      Take a 20–100&nbsp;GB stratified bite of your own corpus, build all three index shapes for real,
+      and run your own eval set against them. You get measured write amplification instead of an
+      assumed one, recall you can defend, and a three-year number procurement will accept.
+    </p>
+    <p>
+      You can absolutely run that yourself — the protocol is the point, and it's in the talk. If you'd
+      rather not, that's the engagement.
+    </p>
+    <a class="cta" href="https://hevmind.com/services/search-pov" rel="noopener">$ talk about a search POV</a>
   </div>
 
   <footer>
     <p class="foot-line">
-      An estimate, like every vendor calculator — including the ones this argues with. The honest
-      version is to sample 20–100&nbsp;GB of your own corpus and measure it.
+      An estimate, like every vendor calculator — including the ones this argues with. Every
+      constant, formula and assumption it uses is written down in
+      <a href="https://github.com/hev/vector-cost#every-number-this-uses" rel="noopener">the README</a>.
+      Start there; there are no hidden ones.
     </p>
+    <!-- The rate card you are actually being priced against. A number is not
+         checkable if you can't see where it came from. -->
+    <p class="foot-line" id="rateLine"></p>
     <p class="foot-line">
-      Every rate on this page is a JSON file you can correct. If we've got your pricing wrong,
-      <a href="https://github.com/hev/vector-cost/tree/main/rates" rel="noopener">open a pull request</a>
-      — that is what the repo is for.
+      <b>Vendors:</b> your rates are one JSON file, not a number buried in a page. If anything
+      below is wrong, out of date, or missing a tier,
+      <a href="https://github.com/hev/vector-cost/tree/main/rates" rel="noopener">send a correction</a>
+      and it ships with the next build.
     </p>
+
+    <!-- Every page these rates were read from, not just the selected vendor's.
+         Generated, so a card that adds a source cannot be left off the list. -->
+    <p class="foot-head">Priced from these pages</p>
+    <div class="sources" id="sourceList"></div>
+
     <p class="foot-links">
       <a href="https://hevmind.com">hevmind.com</a>
+      <span class="dot">·</span>
+      <a href="https://hevmind.com/contact">contact</a>
     </p>
   </footer>
 </div>
@@ -581,6 +761,20 @@ const BYTES_PER_TOKEN = 4;
 const QUANT = { f32: 4, int8: 1, binary: 0.125 };
 const UNIT = { GB, GiB };
 
+// The two option sets a vendor can restrict. Ids are the contract with the rate
+// cards' `supports` block, so they are declared once and the controls are drawn
+// from them rather than written out in the markup.
+const INDEX_TYPES = [
+  { id: "sparse", label: "sparse / BM25" },
+  { id: "dense",  label: "dense" },
+  { id: "multi",  label: "multi-vector" }
+];
+const QUANT_OPTIONS = [
+  { id: "f32",    label: "none — float32" },
+  { id: "int8",   label: "int8 — 4× cut" },
+  { id: "binary", label: "binary — 32× cut" }
+];
+
 /* --- vendor rate cards --------------------------------------------------
    GENERATED — do not edit below. The source of truth is rates/<id>.json in
    github.com/hev/vector-cost, inlined here by bin/build. Correcting a price
@@ -594,11 +788,23 @@ const DEFAULT_VENDOR = @@DEFAULT_VENDOR@@;
 // per-unit rate, a write-unit rate (Pinecone meters upserts at 1 WU per KB),
 // and a per-request rate (topk). They sum, so one path can carry several. A
 // vendor whose bill needs custom code here is a schema bug, not a special case.
+//
+// Two optional fields describe how chunks are packed into API calls, because
+// one vendor's bill turns on it: S3 Vectors charges $0.20/GB but bills a
+// minimum of 128 KB per PUT, so a 6 KB vector sent one at a time is billed at
+// 128 KB and the same corpus costs ~21x more. `chunksPerRequest` is the batch
+// size and `minBillableBytesPerRequest` is the floor it has to clear. The floor
+// raises billable bytes rather than adding a fee — that is why it disappears
+// once the batch is big enough, which is exactly how the real bill behaves.
 function pathCost(card, path, bytes, chunks) {
+  const requests = chunks / (path.chunksPerRequest || 1);
+  const billable = path.minBillableBytesPerRequest
+    ? Math.max(bytes, requests * path.minBillableBytesPerRequest)
+    : bytes;
   let c = 0;
-  if (path.perUnit) c += (bytes / UNIT[card.billingUnit]) * path.perUnit;
-  if (path.perMillionWriteUnits) c += (bytes / path.writeUnitBytes / 1e6) * path.perMillionWriteUnits;
-  if (path.perThousandRequests) c += (chunks / 1000) * path.perThousandRequests;
+  if (path.perUnit) c += (billable / UNIT[card.billingUnit]) * path.perUnit;
+  if (path.perMillionWriteUnits) c += (billable / path.writeUnitBytes / 1e6) * path.perMillionWriteUnits;
+  if (path.perThousandRequests) c += (requests / 1000) * path.perThousandRequests;
   return c;
 }
 
@@ -614,7 +820,7 @@ const VENDORS = Object.fromEntries(RATES.map(card => [card.id, {
   billingUnit: card.billingUnit,
   min: card.minimumMonthly,
   paths: card.write.paths,
-  pathLabel: card.write.label,
+  supports: card.supports || null,
   storage: b => (b / UNIT[card.billingUnit]) * card.storage.perUnitMonth,
   // An unknown path id falls back to the first one, which is also the default,
   // so switching vendors mid-session can never price against a path that the
@@ -622,6 +828,17 @@ const VENDORS = Object.fromEntries(RATES.map(card => [card.id, {
   write: (b, chunks, pathId) =>
     pathCost(card, card.write.paths.find(p => p.id === pathId) || card.write.paths[0], b, chunks)
 }]));
+
+// A vendor that cannot run an index shape must not be shown a price for it.
+// S3 Vectors has no BM25 and stores float32 only, so "sparse on S3 Vectors" is
+// a quote for a product AWS does not sell. A card without `supports` allows
+// everything, which keeps this a one-file change for the one vendor it binds.
+function allows(vendorId, kind, id) {
+  const list = VENDORS[vendorId].supports?.[kind];
+  return !list || list.includes(id);
+}
+const firstAllowed = (kind, options) =>
+  options.find(o => allows(S.vendor, kind, o.id)).id;
 
 const S = {
   datasetGB: 1000,
@@ -705,11 +922,16 @@ function timeline(typeOverride) {
   const g = S.growth / 100;
   const rows = [];
   let cStore = 0, cWrite = 0, cEmbed = 0, prevSource = 0;
+  // Tracked apart from cWrite/cEmbed so the re-index band can name the cost of
+  // the recurring pass alone. A growth month bills a delta write in the same
+  // month as a re-index, and lumping the two would overstate the thing the page
+  // is arguing about.
+  let cRxWrite = 0, cRxEmbed = 0;
 
   for (let m = 1; m <= MONTHS; m++) {
     const source = S.datasetGB * GB * Math.pow(1 + g, m - 1);
     const p = profile(source, typeOverride);
-    let write = 0, embed = 0;
+    let write = 0, embed = 0, rxWrite = 0, rxEmbed = 0;
 
     if (m === 1) {
       write = writeCost(p.bytes, p.chunks);
@@ -720,8 +942,10 @@ function timeline(typeOverride) {
       embed += embedCost(source - prevSource, typeOverride);
     }
     if (rx.has(m)) {
-      write += writeCost(p.bytes, p.chunks);
-      embed += embedCost(source, typeOverride);
+      rxWrite = writeCost(p.bytes, p.chunks);
+      rxEmbed = embedCost(source, typeOverride);
+      write += rxWrite;
+      embed += rxEmbed;
     }
 
     let store = storeCost(p.bytes);
@@ -729,11 +953,14 @@ function timeline(typeOverride) {
     if (store + write < min) store = min - write;   // monthly platform minimum
 
     cStore += store; cWrite += write; cEmbed += embed;
+    cRxWrite += rxWrite; cRxEmbed += rxEmbed;
     rows.push({
       m, store, write, embed,
       total: store + write + embed,
       cStore, cWrite, cEmbed,
       cum: cStore + cWrite + cEmbed,
+      rxWrite, rxEmbed,
+      cRxWrite, cRxEmbed,
       isRx: rx.has(m) || m === 1,
       indexBytes: p.bytes
     });
@@ -909,6 +1136,7 @@ function attachHover() {
    RENDER
    ============================================================ */
 function render() {
+  coerceToSupported();
   syncControlVisibility();
 
   const rows = timeline();
@@ -928,7 +1156,7 @@ function render() {
   document.getElementById("heroConfig").textContent =
     `${TYPE_LABEL[S.indexType]}${S.indexType === "dense" ? " " + S.dims + "-d" : ""} on ${VENDORS[S.vendor].name}`;
   document.getElementById("heroSub").textContent =
-    `${moneyFull(last.cum)} over 36 months — ${passes} full index passes (1 initial + ${rx.size} re-index${rx.size === 1 ? "" : "es"}), ` +
+    `${moneyFull(last.cum)} over the index lifespan — ${passes} full index passes (1 initial + ${rx.size} re-index${rx.size === 1 ? "" : "es"}), ` +
     `${bytes(p.bytes)} on disk from ${bytes(src)} of source.`;
 
   // KPIs
@@ -941,7 +1169,7 @@ function render() {
   set("kWriteSub", `per pass · ${moneyFull(perWrite * passes)} across all ${passes} passes`);
 
   set("kStore", money(perStore));
-  set("kStoreSub", `${moneyFull(perStore * 12)}/year · ${moneyFull(last.cStore)} over 36 months`);
+  set("kStoreSub", `${moneyFull(perStore * 12)}/year · ${moneyFull(last.cStore)} all in`);
 
   set("kIndex", bytes(p.bytes));
   set("kIndexSub", `${amp.toFixed(amp < 10 ? 2 : 0)}× write amplification · ${bytes(p.per)} per ${S.chunkKB} KB chunk`);
@@ -951,17 +1179,78 @@ function render() {
     `Cumulative, stacked. The smooth base is storage; every step is a full corpus rewrite. ` +
     `Re-indexes are spread evenly — one every ${(MONTHS / Math.max(1, rx.size)).toFixed(1)} months.`);
 
+  drawReindex(rows, perWrite, perEmbed, rx);
   drawChart(rows);
   drawTable(rows);
   drawLadder();
-  drawAssumptions(p, src, perEmbed, perWrite, perStore, passes);
 
   set("rxHint", rx.size === 0 ? "no re-index — steady state only"
     : `every ~${(MONTHS / rx.size).toFixed(1)} months · ${rx.size + 1} total passes`);
   set("vendorHint", `billed in ${VENDORS[S.vendor].billingUnit}`);
   set("chunkHint", `≈ ${count(S.datasetGB * GB / (S.chunkKB * KB))} chunks of ${S.chunkKB} KB`);
+
+  const v = VENDORS[S.vendor];
+  html("rateLine",
+    `<b>Priced against ${esc(v.name)}:</b> ${esc(v.note)} ` +
+    `Verified ${esc(v.verified)} — <a href="${esc(REPO_URL)}/blob/main/rates/${esc(v.id)}.json" rel="noopener">its rate card</a>.`);
+}
+
+/* Every pricing page behind every card, drawn once at startup. Rates change and
+   cards get added; a hand-written list of sources would go stale exactly as
+   quietly as the prices it is meant to make checkable. */
+function drawSources() {
+  html("sourceList", RATES.map(card => {
+    const links = card.sources.map(s =>
+      `<li><a href="${esc(s.url)}" rel="noopener">${esc(s.label || hostOf(s.url))}</a></li>`).join("");
+    return `<div class="src">
+      <b>${esc(card.name)}</b> · verified ${esc(card.verified)}
+      <ul>${links}<li><a href="${esc(REPO_URL)}/blob/main/rates/${esc(card.id)}.json" rel="noopener">rates/${esc(card.id)}.json</a></li></ul>
+    </div>`;
+  }).join(""));
+}
+function hostOf(url) {
+  const m = /^https?:\/\/([^/]+)/.exec(url);
+  return m ? m[1].replace(/^www\./, "") : url;
 }
 function set(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
+function html(id, s) { const el = document.getElementById(id); if (el) el.innerHTML = s; }
+
+/* The recurring pass, priced on its own — the number this page exists to show.
+   perWrite/perEmbed are at today's corpus size, so the headline answers "what
+   does it cost to re-index right now"; the 36-month figure is read off the
+   timeline instead, which means corpus growth is already in it. */
+function drawReindex(rows, perWrite, perEmbed, rx) {
+  const last = rows[rows.length - 1];
+  const once = perWrite + perEmbed;
+  const spent = last.cRxWrite + last.cRxEmbed;
+  const sparse = S.indexType === "sparse";
+
+  set("rxOnce", money(once));
+  set("rxWrite", money(perWrite));
+  set("rxEmbed", money(perEmbed));
+
+  const wPct = once > 0 ? (perWrite / once) * 100 : 100;
+  html("rxSplit",
+    `<span style="background:var(--s-write);width:${wPct.toFixed(2)}%"></span>` +
+    `<span style="background:var(--s-embed);width:${(100 - wPct).toFixed(2)}%"></span>`);
+
+  if (rx.size === 0) {
+    set("rxCadence", "No re-index scheduled");
+    set("rxTotal", money(0));
+    html("rxNote",
+      `Steady state only — the month every vendor calculator quotes you. Each re-index you add
+       costs <b>${esc(moneyFull(once))}</b> again, on top of storage.`);
+    return;
+  }
+
+  const share = last.cum > 0 ? (spent / last.cum) * 100 : 0;
+  set("rxCadence", `× ${rx.size} re-index${rx.size === 1 ? "" : "es"} over 3 years`);
+  set("rxTotal", money(spent));
+  html("rxNote",
+    `<b>${share.toFixed(0)}%</b> of the lifetime bill, one every ${(MONTHS / rx.size).toFixed(1)} months. ` +
+    `Storage over the same stretch is <b>${esc(moneyFull(last.cStore))}</b>.` +
+    (sparse ? " Writes only — BM25 has no model to re-run, which is the line item sparse deletes." : ""));
+}
 
 function drawTable(rows) {
   const tb = document.getElementById("tbody");
@@ -980,7 +1269,11 @@ function drawLadder() {
     { type: "dense", override: "dense3072", label: "dense · 3072-d", sub: "text-embedding-3-large shape" },
     { type: "multi", label: "multi-vector", sub: `${S.mvDims}-d per token` }
   ];
+  // A shape the vendor can't run gets a row and no number. Dropping the row
+  // would quietly shorten the ladder; pricing it would quote a product that
+  // isn't for sale.
   const results = variants.map(v => {
+    if (!allows(S.vendor, "indexTypes", v.type)) return { ...v, total: 0, off: true };
     const rows = timeline(v.override || v.type);
     return { ...v, total: rows[rows.length - 1].cum };
   });
@@ -991,6 +1284,13 @@ function drawLadder() {
     : S.indexType;
 
   document.getElementById("ladder").innerHTML = results.map(r => {
+    if (r.off) {
+      return `<div class="lrow off">
+      <span class="l-name"><b>${esc(r.label)}</b><span>not offered by ${esc(VENDORS[S.vendor].name)}</span></span>
+      <span class="l-track"></span>
+      <span class="l-val">—</span>
+    </div>`;
+    }
     const on = (r.override || r.type) === selectedKey;
     const pct = Math.max(0.4, (r.total / max) * 100);
     return `<div class="lrow ${on ? "on" : ""}">
@@ -1001,83 +1301,6 @@ function drawLadder() {
   }).join("");
 }
 
-function drawAssumptions(p, src, perEmbed, perWrite, perStore, passes) {
-  const v = VENDORS[S.vendor];
-  const chunkB = S.chunkKB * KB;
-  const q = QUANT[S.quant];
-  let shape = "";
-
-  const rescoreOn = S.quant !== "f32" && S.rescore;
-  const payloadTerm = S.keepPayload ? ` + <code>${bytes(chunkB)}</code> retained source text` : "";
-
-  if (S.indexType === "sparse") {
-    shape = `<li><b>Index size</b> — <code>${S.sparseRatio}× source</code> of postings` +
-      (S.keepPayload ? " + <code>1×</code> retained source text" : "") +
-      `. BM25 postings are a compression scheme: sub-1×.</li>`;
-  } else if (S.indexType === "multi") {
-    const tpc = chunkB / BYTES_PER_TOKEN;
-    shape = `<li><b>Index size per chunk</b> — <code>${tpc} tokens × ${S.mvDims} dims × ${q} B</code>` +
-      (rescoreOn ? ` + <code>${bytes(tpc * S.mvDims * 4)}</code> full-precision rescore copy` : "") +
-      payloadTerm +
-      ` = <b>${bytes(p.per)}</b> for a ${S.chunkKB} KB chunk. Late-interaction indexes store a vector
-      per token; graph overhead is a rounding error at this scale and is excluded.</li>`;
-  } else {
-    shape = `<li><b>Index size per chunk</b> — <code>${S.dims} dims × ${q} B = ${bytes(S.dims * q)}</code> vector` +
-      (rescoreOn ? ` + <code>${bytes(S.dims * 4)}</code> full-precision rescore copy` : "") +
-      ` + <code>${bytes(S.hnswM * 2 * 4)}</code> HNSW edges (M=${S.hnswM})` + payloadTerm +
-      ` = <b>${bytes(p.per)}</b> per ${S.chunkKB} KB chunk.</li>`;
-  }
-
-  shape += `<li><b>What's counted</b> — ${S.keepPayload
-    ? "index structures <em>plus</em> the source text you keep."
-    : "index structures only."} You keep the source whichever index you pick, so counting it adds
-    exactly 1× to every type: it shrinks the spread, changes no decision, and makes sparse read
-    ${(S.sparseRatio + 1).toFixed(1)}× when the postings list genuinely is ${S.sparseRatio}×.
-    ${S.keepPayload ? "Switch it off in Advanced" : "Switch it on in Advanced"} for the
-    ${S.keepPayload ? "comparable" : "all-in"} figure.</li>`;
-
-  document.getElementById("assumeBody").innerHTML = `
-    <h3>Index shape</h3>
-    <ul>
-      ${shape}
-      <li><b>Write amplification</b> — <code>${bytes(p.bytes)} ÷ ${bytes(src)} = ${(p.bytes / src).toFixed(2)}×</code>.
-        This is the term no vendor calculator asks for, and it sets everything below.</li>
-      <li><b>Chunking</b> — ${S.chunkKB} KB chunks, so ${count(src / chunkB)} chunks.
-        1 KB of English ≈ 250 tokens (4 bytes/token), which is also where the 250M tokens/GB embedding figure comes from.</li>
-    </ul>
-
-    <h3>${esc(v.name)} pricing</h3>
-    <ul>
-      <li>${esc(v.note)}</li>
-      <li><b>Storage</b> — ${esc(bytes(p.bytes))} → <b>${esc(moneyFull(perStore))}/month</b> (${esc(moneyFull(perStore * 12))}/year).</li>
-      <li><b>Writes</b> — <b>${esc(moneyFull(perWrite))}</b> to write the whole index once, billed again on every re-index.</li>
-      <li><b>Rate card</b> — last verified <b>${esc(v.verified)}</b> against
-        <a href="${esc(v.sources[0].url)}" rel="noopener">${esc(v.sources[0].label || "the vendor's pricing page")}</a>.
-        Wrong? <a href="${esc(REPO_URL)}/blob/main/rates/${esc(v.id)}.json" rel="noopener">Correct it in one file</a> —
-        pull requests from vendors are especially welcome.</li>
-    </ul>
-
-    <h3>Embedding</h3>
-    <ul>
-      <li>$${S.embedRate}/M tokens × ${(src / BYTES_PER_TOKEN / 1e9).toFixed(1)}B tokens =
-        <b>${esc(moneyFull(perEmbed))}</b> per pass${S.indexType === "sparse" ? " — zero, because BM25 has no model" : ""}.</li>
-      <li>Quantization does <b>not</b> reduce this. The model emits every dimension at full rate; you pay
-        for all of them and then discard some at index time.</li>
-      <li>Multi-vector rates are the crudest part of this model — priced here at the same per-token rate as
-        dense, which is a floor. ColPali-style page embedding is usually self-hosted GPU time instead.</li>
-    </ul>
-
-    <h3>Timeline</h3>
-    <ul>
-      <li>36 months. Month 1 is the initial build; ${schedule().size} re-index${schedule().size === 1 ? "" : "es"}
-        spread evenly after it — <b>${passes} full passes</b> of embedding and writes in total.</li>
-      <li>Corpus growth ${S.growth}%/month${S.growth > 0 ? " — incremental writes and embeddings are charged monthly on the delta" : ""}.</li>
-      <li>Monthly platform minimums are applied${v.min ? ` (${esc(v.name)}: $${v.min}/mo)` : " (none for topk)"}; at this corpus size they rarely bind.</li>
-      <li><b>Queries are not modelled.</b> They are real and every vendor prices them, but they scale with
-        traffic, not with your corpus — and they are not what surprises people on the invoice.</li>
-    </ul>`;
-}
-
 /* ============================================================
    CONTROLS
    ============================================================ */
@@ -1085,30 +1308,67 @@ function syncControlVisibility() {
   show("fDims", S.indexType === "dense");
   show("fMvDims", S.indexType === "multi");
   show("fQuant", S.indexType !== "sparse");
-  // The write-path selector only exists for vendors that sell more than one way
-  // in. That was Pinecone alone when this was written, but it is a property of
-  // the rate card now, not a name check.
-  show("fPath", VENDORS[S.vendor].paths.length > 1);
   const rw = document.getElementById("rescoreWrap");
   rw.hidden = !(S.indexType !== "sparse" && S.quant !== "f32");
+  // Coercing quantization back to f32 clears the rescore copy in state, so the
+  // box has to follow — otherwise it comes back still ticked the next time a
+  // vendor that supports int8 puts it on screen.
+  document.getElementById("rescore").checked = S.rescore;
 }
 function show(id, on) { const el = document.getElementById(id); if (el) el.hidden = !on; }
 
-/** Rebuild the write-path buttons for the current vendor. */
-function renderPaths() {
-  const card = VENDORS[S.vendor];
-  const paths = card.paths;
+/** Never hold a selection the current vendor can't run. Called from render(), so
+    it is the single place that has to be right — a disabled button is a courtesy
+    to the reader, not the thing that keeps the model honest. */
+function coerceToSupported() {
+  if (!allows(S.vendor, "indexTypes", S.indexType)) S.indexType = firstAllowed("indexTypes", INDEX_TYPES);
+  if (!allows(S.vendor, "quantization", S.quant)) {
+    S.quant = firstAllowed("quantization", QUANT_OPTIONS);
+    S.rescore = false;
+  }
+  const paths = VENDORS[S.vendor].paths;
   if (!paths.some(p => p.id === S.path)) S.path = paths[0].id;
-  set("pathLabel", card.pathLabel || "Write path");
-  document.getElementById("segPath").innerHTML = paths.map(p =>
-    `<button data-v="${esc(p.id)}" aria-pressed="${p.id === S.path}">${esc(p.label || p.id)}</button>`
+}
+
+/** Redraw the two controls whose options depend on the vendor. Only on a vendor
+    change and at startup — rebuilding these every render would drop focus mid-
+    interaction, and nothing else can change what's on offer. */
+function renderVendorOptions() {
+  coerceToSupported();
+  const v = VENDORS[S.vendor];
+  const off = ` disabled title="${esc(v.name)} does not offer this"`;
+
+  document.getElementById("segIndex").innerHTML = INDEX_TYPES.map(t =>
+    `<button data-v="${esc(t.id)}" aria-pressed="${t.id === S.indexType}"` +
+    `${allows(S.vendor, "indexTypes", t.id) ? "" : off}>${esc(t.label)}</button>`
   ).join("");
+
+  const q = document.getElementById("quant");
+  q.innerHTML = QUANT_OPTIONS.map(o =>
+    `<option value="${esc(o.id)}"${allows(S.vendor, "quantization", o.id) ? "" : " disabled"}` +
+    `${o.id === S.quant ? " selected" : ""}>${esc(o.label)}</option>`
+  ).join("");
+  q.value = S.quant;
+
+  // One button even when there is nothing to choose, disabled rather than
+  // absent — it still answers "how is this vendor's write priced", and the
+  // field keeps its place in the row instead of blinking in and out.
+  const only = v.paths.length === 1;
+  document.getElementById("segPath").innerHTML = v.paths.map(p =>
+    `<button data-v="${esc(p.id)}" aria-pressed="${p.id === S.path}"` +
+    `${only ? ` disabled title="${esc(v.name)} sells one way in"` : ""}>${esc(p.label || p.id)}</button>`
+  ).join("");
+  set("pathHint", only ? "no choice to make here" : "the default is the bulk path");
+
+  const limit = document.getElementById("supportHint");
+  limit.textContent = v.supports?.note || "";
+  limit.hidden = !v.supports?.note;
 }
 
 function seg(id, key, after) {
   document.getElementById(id).addEventListener("click", e => {
     const b = e.target.closest("button");
-    if (!b) return;
+    if (!b || b.disabled) return;
     S[key] = b.dataset.v;
     [...e.currentTarget.querySelectorAll("button")].forEach(x =>
       x.setAttribute("aria-pressed", String(x === b)));
@@ -1126,7 +1386,9 @@ function num(id, key, tf) {
 }
 
 seg("segIndex", "indexType");
-seg("segVendor", "vendor", renderPaths);
+// Switching vendors can invalidate the index shape, the quantization and the
+// write path, so those are redrawn before the new bill is priced.
+seg("segVendor", "vendor", renderVendorOptions);
 seg("segPath", "path");
 
 function readSize() {
@@ -1168,7 +1430,8 @@ document.getElementById("tblBtn").addEventListener("click", e => {
 
 window.addEventListener("resize", () => { if (CHART_ROWS.length) drawChart(CHART_ROWS); });
 
-renderPaths();
+renderVendorOptions();
+drawSources();
 render();
 </script>
 </body>
