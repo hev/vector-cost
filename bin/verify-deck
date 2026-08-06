@@ -79,6 +79,8 @@ const perGB = (type, dims) => {
 const SLIDES = md.split(/^---$/m);
 const ladder = SLIDES.find((s) => /bar-label">sparse/.test(s));
 const tiles = SLIDES.find((s) => s.includes("stat-num"));
+const embedSlide = SLIDES.find((s) => s.includes("text-embedding-3-small"));
+const calcSlide = SLIDES.find((s) => /over three years is \$/.test(s));
 
 const barGB = [...(ladder || "").matchAll(/<span class="bar-val" style="text-align:right">([\d.]+) GB<\/span>/g)].map(
 	(m) => parseFloat(m[1]),
@@ -100,6 +102,20 @@ if (barGB.length !== 4 || widths.length !== 4 || stats.length !== 3) {
 			`(expected 4 and 4), stat tiles ${stats.length} (expected 3). Update this parser or the slide.`,
 	);
 }
+
+// The priced corpus is read off the slide rather than hardcoded here, so
+// re-anchoring the deck to a different size is a slides-only edit. Every dollar
+// figure below scales from this one number.
+const sizeM = tiles.match(/^##\s+([\d,.]+)\s*(GB|TB)\s+of documents/m);
+if (!sizeM) {
+	die('could not read the priced corpus size — the stat-tile slide needs a heading like "## 100 GB of documents."');
+}
+const corpusGB = parseFloat(sizeM[1].replace(/,/g, "")) * (sizeM[2] === "TB" ? 1000 : 1);
+const corpusLabel = `${sizeM[1]} ${sizeM[2]}`;
+const dollars = (s) => parseFloat(s.replace(/,/g, ""));
+// Dollar figures are rounded for the slide, so they need a relative tolerance —
+// an absolute one sized for a terabyte silently stops testing anything at 100 GB.
+const round = (want) => Math.max(1, Math.abs(want) * 0.01);
 
 console.log(`\n${slides.replace(`${join(ROOT, "..")}/`, "")} — slides vs dist/index.html\n`);
 
@@ -165,28 +181,44 @@ near(Math.round(mean * 100) / 100, quotedAvg, 0.0001, `mean of the cards (${mean
 
 // Everything below prices at the figure actually printed on the slide, so the
 // stat tiles are checked on the deck's own basis rather than the unrounded mean.
-console.log(`\nstorage bill · 1 TB at the $${quotedAvg.toFixed(2)}/GB-month deck average`);
+console.log(`\nstorage bill · ${corpusLabel} at the $${quotedAvg.toFixed(2)}/GB-month deck average`);
 reset();
-const yr = (type, dims) => perGB(type, dims) * 1000 * quotedAvg * 12;
-near(yr("sparse"), stats[0], 20, "sparse $/year");
-near(yr("dense", 1536), stats[1], 60, "dense $/year");
-near(yr("multi"), stats[2], 200, "multi-vector $/year");
+const yr = (type, dims) => perGB(type, dims) * corpusGB * quotedAvg * 12;
+near(yr("sparse"), stats[0], round(stats[0]), "sparse $/year");
+near(yr("dense", 1536), stats[1], round(stats[1]), "dense $/year");
+near(yr("multi"), stats[2], round(stats[2]), "multi-vector $/year");
 const sparseGB = perGB("sparse");
 const denseGB = perGB("dense", 1536);
 const mvGB = perGB("multi");
 near(mvGB / sparseGB, +md.match(/annual bill <strong>(\d+)×<\/strong>/)[1], 1, "end-to-end spread");
 near(mvGB / denseGB, +md.match(/(\d+)× on the dense → multi-vector step/)[1], 0.5, "dense → multi-vector step");
 
+// Read the table rather than assert frozen constants: the slide states a corpus
+// size, a pass count and two dollar figures per row, and all four are checkable.
+// Hardcoding them here meant a resized deck needed this file edited in lockstep.
 console.log("\nembedding · OpenAI published per-million rates");
+if (!embedSlide) die("could not find the embedding-cost slide (no text-embedding-3-small)");
+const embedRows = [
+	...embedSlide.matchAll(/^\|\s*([\d.,]+)\s*(GB|TB)([^|]*)\|\s*\*{0,2}\$([\d,]+)\*{0,2}\s*\|\s*\*{0,2}\$([\d,]+)\*{0,2}\s*\|/gm),
+];
+if (!embedRows.length) die("recognized the embedding slide but not its table rows — update this parser or the slide");
+for (const [, num, unit, rest, small, large] of embedRows) {
+	const gb = parseFloat(num.replace(/,/g, "")) * (unit === "TB" ? 1000 : 1);
+	const passes = +(rest.match(/×\s*(\d+)/)?.[1] ?? 1);
+	const label = `${num} ${unit}${passes > 1 ? ` × ${passes}` : ""}`;
+	for (const [model, rate, want] of [
+		["3-small", 0.02, dollars(small)],
+		["3-large", 0.13, dollars(large)],
+	]) {
+		reset();
+		S.embedRate = rate;
+		near(embedCost(gb * GB) * passes, want, round(want), `${label} on ${model}`);
+	}
+}
 reset();
 S.embedRate = 0.02;
-near(embedCost(1000 * GB), 5000, 1, "1 TB on 3-small");
-near(embedCost(1000 * GB) * 11, 55000, 10, "1 TB × 11 passes");
-S.embedRate = 0.13;
-near(embedCost(1000 * GB), 32500, 10, "1 TB on 3-large");
-near(embedCost(1000 * GB) * 11, 357500, 50, "1 TB × 11 passes");
 S.indexType = "sparse";
-near(embedCost(1000 * GB), 0, 0, "sparse costs nothing to embed");
+near(embedCost(corpusGB * GB), 0, 0, "sparse costs nothing to embed");
 
 console.log("\nquantization · the ColPali page");
 near((1030 * 128 * 4) / 1000, +md.match(/ColPali, 1030 × 128-d f32 = \*\*(\d+) KB\*\*/)[1], 0.5, "1030 × 128-d f32 KB");
@@ -204,16 +236,40 @@ const sched = [...schedule()].sort((a, b) => a - b);
 near(sched.length, 10, 0, `evenly spread: ${sched.join(", ")}`);
 
 reset();
-S.datasetGB = 1000;
-const idx = profile(1000 * GB);
+S.datasetGB = corpusGB;
+const idx = profile(corpusGB * GB);
 const last = timeline().at(-1);
 const tp = RATES.find((c) => c.id === "turbopuffer");
 const tpWrite = tp?.write.paths[0].perUnit ?? 2.0;
 near(last.cWrite, (idx.bytes / GB) * tpWrite * 11, 5, `writes = 11 × index GB × $${tpWrite.toFixed(2)}`);
-near(last.cEmbed, 5000 * 11, 5, "embedding = 11 × $5,000");
+near(last.cEmbed, embedCost(corpusGB * GB) * 11, 5, "embedding = 11 × one pass");
+
+// The calculator slide states this run twice — rounded in the body, exact in the
+// notes — and until now neither was checked, which is the figure most likely to
+// be left behind by a resize because it also lives in a screenshot.
+console.log("\nthe calculator slide's own headline");
+if (!calcSlide) die("could not find the calculator slide (no 36-month total in its notes)");
+const exact = calcSlide.match(/over three years is \$([\d,]+)/);
+if (!exact) die("the calculator slide's notes no longer state the 36-month total");
+near(last.cum, dollars(exact[1]), round(dollars(exact[1])), "36-month total, exact (notes)");
+
+const headline = calcSlide.match(/\*\*([\d,.]+)\s*(GB|TB)\s*→\s*\$([\d.]+)(K|M)?\s+over 36 months/);
+if (!headline) die("the calculator slide no longer states a `size → $total over 36 months` headline");
+const headGB = parseFloat(headline[1].replace(/,/g, "")) * (headline[2] === "TB" ? 1000 : 1);
+near(headGB, corpusGB, 0, "headline corpus matches the priced corpus");
+const mult = { K: 1e3, M: 1e6 }[headline[4]] ?? 1;
+near(last.cum, parseFloat(headline[3]) * mult, round(parseFloat(headline[3]) * mult), "36-month total, rounded (body)");
+
+const disk = calcSlide.match(/becomes ([\d.]+) (GB|TB) on disk — ([\d.]+)×/);
+if (disk) {
+	const diskGB = parseFloat(disk[1]) * (disk[2] === "TB" ? 1000 : 1);
+	near(idx.bytes / GB, diskGB, round(diskGB), "indexed size stated in the notes");
+	near(idx.bytes / (corpusGB * GB), parseFloat(disk[3]), 0.01, "write amplification stated in the notes");
+}
+
 console.log(
-	`\n  1 TB dense 1536 on turbopuffer: ${(idx.bytes / GB).toFixed(0)} GB indexed ` +
-		`(${(idx.bytes / (1000 * GB)).toFixed(2)}×), $${Math.round(last.cum).toLocaleString()} over 36 months`,
+	`\n  ${corpusLabel} dense 1536 on turbopuffer: ${(idx.bytes / GB).toFixed(0)} GB indexed ` +
+		`(${(idx.bytes / (corpusGB * GB)).toFixed(2)}×), $${Math.round(last.cum).toLocaleString()} over 36 months`,
 );
 
 console.log(fails ? `\n${fails} check(s) FAILED — slides and calculator disagree\n` : "\nall checks pass\n");
