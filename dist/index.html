@@ -1701,5 +1701,42 @@ renderVendorOptions();
 drawSources();
 render();
 </script>
+
+<!-- ============================================================
+     Analytics — canonical host only.
+     This file is MIT and meant to be self-hosted, and the README promises a
+     build output with no network dependencies. That promise is kept for every
+     copy but one: nothing below runs, and no request is made, unless the page
+     is being served from hevmind.com. Forks, localhost, and any other host
+     get the same zero-network page they always did.
+     Why it exists: the page is the free artifact a talk points at as proof, and
+     it was invisible in analytics for its whole life — the gate around it was
+     instrumented, so signups were countable while the thing people signed up
+     for was not.
+     ============================================================ -->
+<script>
+(function () {
+  "use strict";
+  var h = location.hostname;
+  if (h !== "hevmind.com" && h !== "www.hevmind.com") return;
+
+  !function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey getNextSurveyStep identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageViewId captureTraceFeedback captureTraceMetric".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);
+  posthog.init('phc_rZbCMBpeYIhMWpZCWUycgO512oyAO9RxCFexuWCqVRv',{api_host:'https://us.i.posthog.com',person_profiles:'identified_only',defaults:'2025-05-24'});
+
+  // A pageview says they arrived; it does not say they used it. One shot on the
+  // first real interaction, because "did anyone touch the calculator" is the
+  // only engagement question worth asking about a single-page tool.
+  var sent = false;
+  function once() {
+    if (sent) return;
+    sent = true;
+    if (window.posthog) posthog.capture("calculator_used");
+    document.removeEventListener("input", once, true);
+    document.removeEventListener("change", once, true);
+  }
+  document.addEventListener("input", once, true);
+  document.addEventListener("change", once, true);
+})();
+</script>
 </body>
 </html>

@@ -18,7 +18,11 @@ import { join } from "node:path";
 import { ROOT } from "./lib.mjs";
 
 const html = readFileSync(join(ROOT, "dist", "index.html"), "utf8");
-const script = html.slice(html.indexOf("<script>\n") + 9, html.lastIndexOf("</script>"));
+// First block only. The page has a second, host-guarded analytics block at the
+// end of <body>, and it is deliberately not under test — slicing to the *last*
+// </script> would swallow it plus the comment between the two and fail to parse.
+const start = html.indexOf("<script>\n") + 9;
+const script = html.slice(start, html.indexOf("</script>", start));
 
 const els = new Map();
 const el = (id) => {

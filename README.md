@@ -210,6 +210,13 @@ node bin/build          # -> dist/index.html
 open dist/index.html
 ```
 
+The one asterisk on "no network dependencies": the file carries a PostHog snippet
+that is **hard-guarded to `hevmind.com`** and does nothing anywhere else. Your
+copy, and `file://`, and localhost, make zero third-party requests — the guard is
+a hostname comparison at the top of the last `<script>` in the file, so it is
+worth ten seconds to verify rather than trust. Delete that block if you would
+rather not carry it; nothing else references it.
+
 No dependencies, no package.json, no build toolchain. Node 18+ and a browser.
 
 ## Repo layout
